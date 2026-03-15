@@ -50,6 +50,9 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 - `presence.activity_text` supports `{server_name}`, `{minecraft_version}`, `{online_players}`, `{webhook_queue_depth}`, and `{guild_name}`.
 - `presence.activity_type` supports `playing`, `streaming`, `listening`, `watching`, `competing`, and `custom`.
 - `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` tune runtime verbosity.
+- `system_messages.enabled` turns on bot-owned join/quit/death delivery from the plugin queue.
+- `system_messages.channel_id` can target a dedicated channel, or you can leave it at `0` to fall back to the first `discord.relay_channel_ids` entry.
+- `system_messages.message_template` supports `{content}`, `{event}`, and `{player_name}`.
 - `slash_commands.ephemeral_responses` controls whether command replies stay visible only to the caller.
 
 ## Slash commands

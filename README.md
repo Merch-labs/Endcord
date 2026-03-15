@@ -92,6 +92,8 @@ Config notes:
 - `bot_bridge.shared_secret` must match the bot config exactly.
 - `bot_bridge.api_route_prefix` must line up with the bot's `plugin_bridge.base_url`.
 - `bot_bridge.allow_local_requests_only` should stay `true` unless you intentionally expose the API behind another trusted hop.
+- `bot_bridge.outbound_system_messages_enabled` moves join/quit/death delivery to the companion bot so those lifecycle posts come from the bot identity instead of the webhook identity.
+- `bot_bridge.outbound_system_message_max_batch` controls how many queued lifecycle events the bot can drain per poll.
 - `bot_bridge.inbound_chat_template` supports `{author}`, `{content}`, `{channel}`, `{guild}`, `{message_url}`, and `{server}`.
 - `bot_bridge.inbound_chat_max_length` clamps how much Discord content the plugin will project into Minecraft chat.
 
@@ -159,6 +161,7 @@ Bot config highlights:
 - `relay.ignore_bot_messages` and `relay.ignore_webhook_messages` let you decide whether other automation can talk back into Minecraft.
 - `presence.activity_text` supports `{server_name}`, `{minecraft_version}`, `{online_players}`, `{webhook_queue_depth}`, and `{guild_name}`.
 - `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` control bot verbosity.
+- `system_messages.enabled` turns on bot-owned join/quit/death delivery, `system_messages.channel_id` selects the target channel, and `system_messages.message_template` supports `{content}`, `{event}`, and `{player_name}`.
 - Slash commands provided today: `/mcstatus`, `/mccommand`, `/mcreloadbridge`.
 
 ## Deployment order
@@ -176,6 +179,7 @@ Bot config highlights:
 - Implemented: Configurable relay templates and event toggles for chat, join, quit, and death messages
 - Implemented: Bedrock skin head rendering, caching, and built-in avatar HTTP serving
 - Implemented: Discord-to-Minecraft relay through the companion bot and secure plugin API
+- Implemented: Optional bot-owned delivery path for lifecycle/system messages while player chat stays on the webhook
 - Implemented: Customizable companion-bot presence and relay/logging controls
 - Implemented: Slash-command driven status, reload, and remote command execution
 - Implemented: Linux `.so` build path for Endstone and JSON-driven runtime configuration

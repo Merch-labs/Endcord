@@ -6,8 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - Added configurable Minecraft-to-Discord relay toggles for chat, join, quit, and death events.
 - Added separate Discord webhook templates for chat posts and lifecycle/system posts, including optional player avatars on join/quit/death messages.
+- Added an optional plugin-to-bot queue so join/quit/death messages can be posted by the bot identity instead of the webhook identity.
 - Added plugin-side logging controls for filtered events, webhook successes, HTTP requests, avatar cache activity, inbound Discord chat, and remote commands.
 - Added Discord-to-Minecraft formatting controls for attachment lines, jump-link lines, and final relay content templating.
+- Added bot-side polling, routing, and templates for queued system messages.
 - Added companion-bot presence customization with live server placeholders and periodic status refresh from the plugin API.
 - Added companion-bot logging controls for ignored messages, successful relays, presence refreshes, and log level selection.
 
