@@ -38,6 +38,12 @@ class PluginBridgeConfig:
 class RelayConfig:
     include_attachment_urls: bool
     include_jump_url: bool
+    ignore_bot_messages: bool
+    ignore_webhook_messages: bool
+    message_template: str
+    attachment_template: str
+    jump_url_template: str
+    join_separator: str
     max_message_length: int
 
 
@@ -48,11 +54,32 @@ class SlashCommandConfig:
 
 
 @dataclass(slots=True)
+class PresenceConfig:
+    enabled: bool
+    status: str
+    activity_type: str
+    activity_text: str
+    fallback_text: str
+    streaming_url: str
+    update_interval_seconds: int
+
+
+@dataclass(slots=True)
+class LoggingConfig:
+    level: str
+    log_ignored_messages: bool
+    log_relay_successes: bool
+    log_presence_updates: bool
+
+
+@dataclass(slots=True)
 class BotConfig:
     discord: DiscordConfig
     plugin_bridge: PluginBridgeConfig
     relay: RelayConfig
     slash_commands: SlashCommandConfig
+    presence: PresenceConfig
+    logging: LoggingConfig
 
     @staticmethod
     def load(path: Path) -> "BotConfig":
@@ -62,6 +89,8 @@ class BotConfig:
         plugin_cfg = data["plugin_bridge"]
         relay_cfg = data.get("relay", {})
         slash_cfg = data.get("slash_commands", {})
+        presence_cfg = data.get("presence", {})
+        logging_cfg = data.get("logging", {})
 
         config = BotConfig(
             discord=DiscordConfig(
@@ -81,11 +110,32 @@ class BotConfig:
             relay=RelayConfig(
                 include_attachment_urls=bool(relay_cfg.get("include_attachment_urls", True)),
                 include_jump_url=bool(relay_cfg.get("include_jump_url", False)),
+                ignore_bot_messages=bool(relay_cfg.get("ignore_bot_messages", True)),
+                ignore_webhook_messages=bool(relay_cfg.get("ignore_webhook_messages", True)),
+                message_template=str(relay_cfg.get("message_template", "{content}")),
+                attachment_template=str(relay_cfg.get("attachment_template", "[attachment] {url}")),
+                jump_url_template=str(relay_cfg.get("jump_url_template", "[jump] {url}")),
+                join_separator=str(relay_cfg.get("join_separator", "\n")),
                 max_message_length=max(int(relay_cfg.get("max_message_length", 1800)), 32),
             ),
             slash_commands=SlashCommandConfig(
                 enabled=bool(slash_cfg.get("enabled", True)),
                 ephemeral_responses=bool(slash_cfg.get("ephemeral_responses", True)),
+            ),
+            presence=PresenceConfig(
+                enabled=bool(presence_cfg.get("enabled", True)),
+                status=str(presence_cfg.get("status", "online")).lower(),
+                activity_type=str(presence_cfg.get("activity_type", "watching")).lower(),
+                activity_text=str(presence_cfg.get("activity_text", "{server_name} | {online_players} online")),
+                fallback_text=str(presence_cfg.get("fallback_text", "Bridge online")),
+                streaming_url=str(presence_cfg.get("streaming_url", "")),
+                update_interval_seconds=max(int(presence_cfg.get("update_interval_seconds", 120)), 0),
+            ),
+            logging=LoggingConfig(
+                level=str(logging_cfg.get("level", "INFO")).upper(),
+                log_ignored_messages=bool(logging_cfg.get("log_ignored_messages", False)),
+                log_relay_successes=bool(logging_cfg.get("log_relay_successes", False)),
+                log_presence_updates=bool(logging_cfg.get("log_presence_updates", False)),
             ),
         )
 
@@ -97,6 +147,12 @@ class BotConfig:
             raise ValueError("plugin_bridge.base_url must start with http:// or https://")
         if not config.plugin_bridge.shared_secret or config.plugin_bridge.shared_secret == "change-me":
             raise ValueError("plugin_bridge.shared_secret must be configured")
+        if config.presence.status not in {"online", "idle", "dnd", "invisible"}:
+            raise ValueError("presence.status must be one of online, idle, dnd, invisible")
+        if config.presence.activity_type not in {"playing", "streaming", "listening", "watching", "competing", "custom"}:
+            raise ValueError("presence.activity_type must be one of playing, streaming, listening, watching, competing, custom")
+        if config.logging.level not in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
+            raise ValueError("logging.level must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
 
         return config
 
@@ -168,9 +224,16 @@ class BedrockDiscordBridgeBot(discord.Client):
         self.config = config
         self.bridge = PluginBridgeClient(config)
         self.tree = app_commands.CommandTree(self)
+        self._presence_task: asyncio.Task[None] | None = None
         self._register_commands()
 
     async def close(self) -> None:
+        if self._presence_task is not None:
+            self._presence_task.cancel()
+            try:
+                await self._presence_task
+            except asyncio.CancelledError:
+                pass
         await self.bridge.close()
         await super().close()
 
@@ -187,26 +250,64 @@ class BedrockDiscordBridgeBot(discord.Client):
 
     async def on_ready(self) -> None:
         LOGGER.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "unknown"))
+        if self.config.presence.enabled and (self._presence_task is None or self._presence_task.done()):
+            self._presence_task = asyncio.create_task(self._presence_loop())
 
     async def on_message(self, message: discord.Message) -> None:
         if not self.config.discord.relay_to_game_enabled:
             return
-        if message.author.bot or message.webhook_id is not None:
+        if self.config.relay.ignore_bot_messages and message.author.bot:
+            self._log_ignored_message(message, "author is a bot")
+            return
+        if self.config.relay.ignore_webhook_messages and message.webhook_id is not None:
+            self._log_ignored_message(message, "message came from a webhook")
             return
         if message.guild is None or message.guild.id != self.config.discord.guild_id:
+            self._log_ignored_message(message, "message is outside the configured guild")
             return
         if self.config.discord.relay_channel_ids and message.channel.id not in self.config.discord.relay_channel_ids:
+            self._log_ignored_message(message, "channel is not in discord.relay_channel_ids")
             return
 
         content = message.content.strip()
-        parts: list[str] = [content] if content else []
+        attachment_lines: list[str] = []
         if self.config.relay.include_attachment_urls and message.attachments:
-            parts.extend(f"[attachment] {attachment.url}" for attachment in message.attachments)
-        if self.config.relay.include_jump_url:
-            parts.append(f"[jump] {message.jump_url}")
+            attachment_lines.extend(
+                self._apply_template(
+                    self.config.relay.attachment_template,
+                    {
+                        "{filename}": attachment.filename,
+                        "{url}": attachment.url,
+                        "{content_type}": attachment.content_type or "",
+                    },
+                )
+                for attachment in message.attachments
+            )
+        attachments_text = self.config.relay.join_separator.join(line for line in attachment_lines if line).strip()
 
-        relay_content = "\n".join(part for part in parts if part).strip()
+        jump_url_text = ""
+        if self.config.relay.include_jump_url:
+            jump_url_text = self._apply_template(
+                self.config.relay.jump_url_template,
+                {
+                    "{url}": message.jump_url,
+                },
+            )
+
+        relay_content = self._apply_template(
+            self.config.relay.message_template,
+            {
+                "{author}": message.author.display_name,
+                "{content}": content,
+                "{attachments}": attachments_text,
+                "{jump_url}": jump_url_text,
+                "{channel}": message.channel.name,
+                "{guild}": message.guild.name,
+                "{message_url}": message.jump_url,
+            },
+        ).strip()
         if not relay_content:
+            self._log_ignored_message(message, "formatted relay content is empty")
             return
 
         relay_content = relay_content[: self.config.relay.max_message_length]
@@ -219,6 +320,8 @@ class BedrockDiscordBridgeBot(discord.Client):
                 guild_name=message.guild.name,
                 message_url=message.jump_url,
             )
+            if self.config.logging.log_relay_successes:
+                LOGGER.info("Relayed Discord message %s from #%s into Minecraft.", message.id, message.channel.name)
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Failed to relay Discord message %s into Minecraft: %s", message.id, exc)
 
@@ -303,6 +406,87 @@ class BedrockDiscordBridgeBot(discord.Client):
         user_role_ids = {role.id for role in user.roles}
         return bool(user_role_ids.intersection(role_ids))
 
+    async def _presence_loop(self) -> None:
+        interval = self.config.presence.update_interval_seconds
+        while not self.is_closed():
+            try:
+                await self._refresh_presence()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Failed to refresh bot presence: %s", exc)
+
+            if interval <= 0:
+                return
+            await asyncio.sleep(interval)
+
+    async def _refresh_presence(self) -> None:
+        template_text = self.config.presence.fallback_text
+        status_payload: dict[str, Any] = {}
+
+        try:
+            status_payload = await self.bridge.get_status()
+            template_text = self.config.presence.activity_text
+        except Exception as exc:  # noqa: BLE001
+            if self.config.logging.log_presence_updates:
+                LOGGER.warning("Presence status refresh fell back to fallback_text: %s", exc)
+
+        guild = self.get_guild(self.config.discord.guild_id)
+        activity_text = self._apply_template(
+            template_text,
+            {
+                "{server_name}": str(status_payload.get("server_name", "Unknown Server")),
+                "{minecraft_version}": str(status_payload.get("minecraft_version", "unknown")),
+                "{online_players}": str(status_payload.get("online_players", 0)),
+                "{webhook_queue_depth}": str(status_payload.get("webhook_queue_depth", 0)),
+                "{guild_name}": guild.name if guild is not None else "",
+            },
+        ).strip()
+        if not activity_text:
+            activity_text = self.config.presence.fallback_text or "Bridge online"
+
+        await self.change_presence(
+            status=self._discord_status(self.config.presence.status),
+            activity=self._build_activity(activity_text),
+        )
+        if self.config.logging.log_presence_updates:
+            LOGGER.info("Updated presence to '%s' (%s).", activity_text, self.config.presence.activity_type)
+
+    def _build_activity(self, activity_text: str) -> discord.BaseActivity | None:
+        activity_type = self.config.presence.activity_type
+        if activity_type == "custom":
+            return discord.CustomActivity(name=activity_text)
+        if activity_type == "streaming":
+            return discord.Streaming(name=activity_text, url=self.config.presence.streaming_url or "https://twitch.tv/")
+
+        type_map = {
+            "playing": discord.ActivityType.playing,
+            "listening": discord.ActivityType.listening,
+            "watching": discord.ActivityType.watching,
+            "competing": discord.ActivityType.competing,
+        }
+        return discord.Activity(type=type_map[activity_type], name=activity_text)
+
+    @staticmethod
+    def _discord_status(value: str) -> discord.Status:
+        return {
+            "online": discord.Status.online,
+            "idle": discord.Status.idle,
+            "dnd": discord.Status.dnd,
+            "invisible": discord.Status.invisible,
+        }[value]
+
+    def _log_ignored_message(self, message: discord.Message, reason: str) -> None:
+        if self.config.logging.log_ignored_messages:
+            LOGGER.debug("Ignoring Discord message %s: %s.", message.id, reason)
+
+    @staticmethod
+    def _apply_template(template: str, replacements: dict[str, str]) -> str:
+        value = template
+        for needle, replacement in replacements.items():
+            value = value.replace(needle, replacement)
+        return value
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Bedrock Discord Bridge companion bot.")
@@ -314,7 +498,10 @@ async def async_main() -> None:
     args = parse_args()
     config = BotConfig.load(Path(args.config))
 
-    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, config.logging.level, logging.INFO),
+        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+    )
 
     client = BedrockDiscordBridgeBot(config)
     await client.start(config.discord.token)

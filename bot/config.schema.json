@@ -8,7 +8,9 @@
     "discord",
     "plugin_bridge",
     "relay",
-    "slash_commands"
+    "slash_commands",
+    "presence",
+    "logging"
   ],
   "properties": {
     "discord": {
@@ -88,6 +90,12 @@
       "required": [
         "include_attachment_urls",
         "include_jump_url",
+        "ignore_bot_messages",
+        "ignore_webhook_messages",
+        "message_template",
+        "attachment_template",
+        "jump_url_template",
+        "join_separator",
         "max_message_length"
       ],
       "properties": {
@@ -96,6 +104,24 @@
         },
         "include_jump_url": {
           "type": "boolean"
+        },
+        "ignore_bot_messages": {
+          "type": "boolean"
+        },
+        "ignore_webhook_messages": {
+          "type": "boolean"
+        },
+        "message_template": {
+          "type": "string"
+        },
+        "attachment_template": {
+          "type": "string"
+        },
+        "jump_url_template": {
+          "type": "string"
+        },
+        "join_separator": {
+          "type": "string"
         },
         "max_message_length": {
           "type": "integer",
@@ -115,6 +141,88 @@
           "type": "boolean"
         },
         "ephemeral_responses": {
+          "type": "boolean"
+        }
+      }
+    },
+    "presence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "status",
+        "activity_type",
+        "activity_text",
+        "fallback_text",
+        "streaming_url",
+        "update_interval_seconds"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "online",
+            "idle",
+            "dnd",
+            "invisible"
+          ]
+        },
+        "activity_type": {
+          "type": "string",
+          "enum": [
+            "playing",
+            "streaming",
+            "listening",
+            "watching",
+            "competing",
+            "custom"
+          ]
+        },
+        "activity_text": {
+          "type": "string"
+        },
+        "fallback_text": {
+          "type": "string"
+        },
+        "streaming_url": {
+          "type": "string"
+        },
+        "update_interval_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level",
+        "log_ignored_messages",
+        "log_relay_successes",
+        "log_presence_updates"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "CRITICAL",
+            "ERROR",
+            "WARNING",
+            "INFO",
+            "DEBUG"
+          ]
+        },
+        "log_ignored_messages": {
+          "type": "boolean"
+        },
+        "log_relay_successes": {
+          "type": "boolean"
+        },
+        "log_presence_updates": {
           "type": "boolean"
         }
       }
