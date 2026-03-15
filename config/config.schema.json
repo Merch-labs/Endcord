@@ -222,8 +222,10 @@
         "allow_local_requests_only",
         "inbound_chat_enabled",
         "command_enabled",
+        "outbound_system_messages_enabled",
         "inbound_chat_template",
         "inbound_chat_max_length",
+        "outbound_system_message_max_batch",
         "request_timeout_ms"
       ],
       "properties": {
@@ -245,6 +247,9 @@
         "command_enabled": {
           "type": "boolean"
         },
+        "outbound_system_messages_enabled": {
+          "type": "boolean"
+        },
         "inbound_chat_template": {
           "type": "string"
         },
@@ -252,6 +257,11 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 4000
+        },
+        "outbound_system_message_max_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
         },
         "request_timeout_ms": {
           "type": "integer",

@@ -191,7 +191,7 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
     }
 
     json root = {
-        {"config_version", 2},
+        {"config_version", 3},
         {"enabled", true},
         {"discord",
          {{"webhook_url", ""},
@@ -238,8 +238,10 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
           {"allow_local_requests_only", true},
           {"inbound_chat_enabled", true},
           {"command_enabled", true},
+          {"outbound_system_messages_enabled", false},
           {"inbound_chat_template", "[Discord] #{channel} <{author}> {content}"},
           {"inbound_chat_max_length", 2000},
+          {"outbound_system_message_max_batch", 20},
           {"request_timeout_ms", 5000}}},
         {"logging",
          {{"log_filtered_events", false},
@@ -419,12 +421,22 @@ void BedrockDiscordBridgePlugin::loadConfig()
             if (bot_bridge.contains("command_enabled") && bot_bridge["command_enabled"].is_boolean()) {
                 config_.bot_bridge.command_enabled = bot_bridge["command_enabled"].get<bool>();
             }
+            if (bot_bridge.contains("outbound_system_messages_enabled") &&
+                bot_bridge["outbound_system_messages_enabled"].is_boolean()) {
+                config_.bot_bridge.outbound_system_messages_enabled =
+                    bot_bridge["outbound_system_messages_enabled"].get<bool>();
+            }
             if (bot_bridge.contains("inbound_chat_template") && bot_bridge["inbound_chat_template"].is_string()) {
                 config_.bot_bridge.inbound_chat_template = bot_bridge["inbound_chat_template"].get<std::string>();
             }
             if (bot_bridge.contains("inbound_chat_max_length") &&
                 bot_bridge["inbound_chat_max_length"].is_number_integer()) {
                 config_.bot_bridge.inbound_chat_max_length = bot_bridge["inbound_chat_max_length"].get<int>();
+            }
+            if (bot_bridge.contains("outbound_system_message_max_batch") &&
+                bot_bridge["outbound_system_message_max_batch"].is_number_integer()) {
+                config_.bot_bridge.outbound_system_message_max_batch =
+                    bot_bridge["outbound_system_message_max_batch"].get<int>();
             }
             if (bot_bridge.contains("request_timeout_ms") && bot_bridge["request_timeout_ms"].is_number_integer()) {
                 config_.bot_bridge.request_timeout_ms = bot_bridge["request_timeout_ms"].get<int>();
@@ -480,6 +492,8 @@ void BedrockDiscordBridgePlugin::loadConfig()
                                                                          : config_.bot_bridge.api_route_prefix);
     config_.bot_bridge.shared_secret = normalizeSecret(config_.bot_bridge.shared_secret);
     config_.bot_bridge.inbound_chat_max_length = std::clamp(config_.bot_bridge.inbound_chat_max_length, 1, 4000);
+    config_.bot_bridge.outbound_system_message_max_batch =
+        std::clamp(config_.bot_bridge.outbound_system_message_max_batch, 1, 100);
     config_.bot_bridge.request_timeout_ms = std::max(config_.bot_bridge.request_timeout_ms, 250);
 
     if (!config_.avatar.public_base_url.empty() && config_.avatar.public_base_url.ends_with('/')) {
@@ -526,9 +540,16 @@ void BedrockDiscordBridgePlugin::restartRuntime()
 
 void BedrockDiscordBridgePlugin::clearQueue()
 {
-    std::lock_guard lock(queue_mutex_);
-    webhook_queue_.clear();
-    next_request_at_ = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(queue_mutex_);
+        webhook_queue_.clear();
+        next_request_at_ = std::chrono::steady_clock::now();
+    }
+
+    {
+        std::lock_guard lock(system_message_mutex_);
+        pending_system_messages_.clear();
+    }
 }
 
 void BedrockDiscordBridgePlugin::startWorker()
@@ -740,6 +761,11 @@ void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::
         avatar_url = getOrCreateAvatarUrl(player);
     }
 
+    if (config_.bot_bridge.enabled && config_.bot_bridge.outbound_system_messages_enabled) {
+        enqueueBotSystemMessage(event_name, player.getName(), content);
+        return;
+    }
+
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
 }
 
@@ -789,12 +815,33 @@ void BedrockDiscordBridgePlugin::enqueueDiscordMessage(const std::string &source
     enqueueWebhookPayload({source_name, payload.str(), 0});
 }
 
+void BedrockDiscordBridgePlugin::enqueueBotSystemMessage(std::string event_name, std::string player_name,
+                                                         std::string content)
+{
+    if (content.empty()) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping bot system message for '{}' because the formatted content is empty.",
+                              player_name);
+        }
+        return;
+    }
+
+    std::lock_guard lock(system_message_mutex_);
+    pending_system_messages_.push_back(
+        {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, 2000)});
+}
+
 void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) const
 {
     std::size_t queue_depth = 0;
     {
         std::lock_guard lock(queue_mutex_);
         queue_depth = webhook_queue_.size();
+    }
+    std::size_t system_message_queue_depth = 0;
+    {
+        std::lock_guard lock(system_message_mutex_);
+        system_message_queue_depth = pending_system_messages_.size();
     }
 
     sender.sendMessage("Bridge enabled: {}", config_.enabled ? "yes" : "no");
@@ -805,6 +852,8 @@ void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) con
     sender.sendMessage("Death relay enabled: {}", config_.relay.death_enabled ? "yes" : "no");
     sender.sendMessage("Webhook configured: {}", webhook_target_.has_value() ? "yes" : "no");
     sender.sendMessage("Webhook queue depth: {}", queue_depth);
+    sender.sendMessage("Bot system messages enabled: {}", config_.bot_bridge.outbound_system_messages_enabled ? "yes" : "no");
+    sender.sendMessage("Bot system message queue depth: {}", system_message_queue_depth);
     sender.sendMessage("Avatar rendering enabled: {}", config_.avatar.enabled ? "yes" : "no");
     sender.sendMessage("Avatar cache dir: {}", getAvatarCacheDir().string());
     sender.sendMessage("Avatar HTTP server enabled: {}", config_.avatar.http_server.enabled ? "yes" : "no");
@@ -913,6 +962,10 @@ void BedrockDiscordBridgePlugin::installBotBridgeRoutes()
                          [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeChat(req, res); });
     avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/command",
                          [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeCommand(req, res); });
+    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/system-messages/drain",
+                         [this](const httplib::Request &req, httplib::Response &res) {
+                             handleBotBridgeDrainSystemMessages(req, res);
+                         });
 }
 
 void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Response &res)
@@ -1070,6 +1123,12 @@ void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &r
         queue_depth = webhook_queue_.size();
     }
 
+    std::size_t system_message_queue_depth = 0;
+    {
+        std::lock_guard lock(system_message_mutex_);
+        system_message_queue_depth = pending_system_messages_.size();
+    }
+
     res.status = 200;
     res.set_content(json({{"ok", true},
                           {"server_name", getServer().getName()},
@@ -1077,13 +1136,46 @@ void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &r
                           {"online_players", getServer().getOnlinePlayers().size()},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"webhook_queue_depth", queue_depth},
+                          {"system_message_queue_depth", system_message_queue_depth},
                           {"minecraft_to_discord_enabled", config_.relay.minecraft_to_discord_enabled},
                           {"discord_to_minecraft_enabled", config_.bot_bridge.inbound_chat_enabled},
+                          {"bot_system_messages_enabled", config_.bot_bridge.outbound_system_messages_enabled},
                           {"avatar_enabled", config_.avatar.enabled},
                           {"avatar_base_url", getEffectiveAvatarBaseUrl().value_or("")},
                           {"bot_bridge_enabled", config_.bot_bridge.enabled}})
                         .dump(),
                     "application/json");
+}
+
+void BedrockDiscordBridgePlugin::handleBotBridgeDrainSystemMessages(const httplib::Request &req,
+                                                                    httplib::Response &res)
+{
+    if (!isAuthorizedBotBridgeRequest(req, res)) {
+        return;
+    }
+    if (!config_.bot_bridge.outbound_system_messages_enabled) {
+        res.status = 403;
+        res.set_content(R"({"ok":false,"error":"bot system message relay disabled"})", "application/json");
+        return;
+    }
+
+    json messages = json::array();
+    {
+        std::lock_guard lock(system_message_mutex_);
+        const auto batch_size =
+            std::min<std::size_t>(pending_system_messages_.size(),
+                                  static_cast<std::size_t>(config_.bot_bridge.outbound_system_message_max_batch));
+        for (std::size_t i = 0; i < batch_size; ++i) {
+            auto message = std::move(pending_system_messages_.front());
+            pending_system_messages_.pop_front();
+            messages.push_back({{"event", message.event_name},
+                                {"player_name", message.player_name},
+                                {"content", message.content}});
+        }
+    }
+
+    res.status = 200;
+    res.set_content(json({{"ok", true}, {"messages", messages}}).dump(), "application/json");
 }
 
 bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const

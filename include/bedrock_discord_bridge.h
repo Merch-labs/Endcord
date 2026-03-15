@@ -94,8 +94,10 @@ private:
         bool allow_local_requests_only = true;
         bool inbound_chat_enabled = true;
         bool command_enabled = true;
+        bool outbound_system_messages_enabled = false;
         std::string inbound_chat_template = "[Discord] #{channel} <{author}> {content}";
         int inbound_chat_max_length = 2000;
+        int outbound_system_message_max_batch = 20;
         int request_timeout_ms = 5000;
     };
 
@@ -110,7 +112,7 @@ private:
     };
 
     struct BridgeConfig {
-        int config_version = 2;
+        int config_version = 3;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};
@@ -136,6 +138,12 @@ private:
         std::optional<std::string> public_url;
     };
 
+    struct PendingSystemMessage {
+        std::string event_name;
+        std::string player_name;
+        std::string content;
+    };
+
     void ensureDataFolder() const;
     void writeDefaultConfigIfMissing() const;
     void loadConfig();
@@ -152,11 +160,13 @@ private:
                                         const std::string &content_template, const std::string &event_message);
     void enqueueDiscordMessage(const std::string &source_name, std::string username, std::string content,
                                const std::optional<std::string> &avatar_url);
+    void enqueueBotSystemMessage(std::string event_name, std::string player_name, std::string content);
     void enqueueWebhookPayload(WebhookJob job);
     void processWebhookJob(WebhookJob job);
     void installBotBridgeRoutes();
     void handleBotBridgeChat(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res);
+    void handleBotBridgeDrainSystemMessages(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
     bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
 
@@ -199,4 +209,6 @@ private:
     std::thread avatar_server_thread_;
     bool stop_worker_ = false;
     std::chrono::steady_clock::time_point next_request_at_ = std::chrono::steady_clock::now();
+    mutable std::mutex system_message_mutex_;
+    std::deque<PendingSystemMessage> pending_system_messages_;
 };

@@ -1,5 +1,5 @@
 {
-  "config_version": 2,
+  "config_version": 3,
   "enabled": true,
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/replace-me",
@@ -51,8 +51,10 @@
     "allow_local_requests_only": true,
     "inbound_chat_enabled": true,
     "command_enabled": true,
+    "outbound_system_messages_enabled": false,
     "inbound_chat_template": "[Discord] #{channel} <{author}> {content}",
     "inbound_chat_max_length": 2000,
+    "outbound_system_message_max_batch": 20,
     "request_timeout_ms": 5000
   },
   "logging": {
