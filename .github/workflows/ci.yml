@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-linux:
+    name: Build Endstone Plugin
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build libssl-dev
+
+      - name: Bootstrap local libc++ toolchain
+        run: ./scripts/setup-local-libcxx.sh
+
+      - name: Configure plugin build
+        run: cmake --preset linux-clang-local-libcxx
+
+      - name: Build plugin
+        run: cmake --build --preset build-local
+
+      - name: Verify plugin artifact
+        run: test -f build-local/endstone_bedrock_discord_bridge.so
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: endstone-bedrock-discord-bridge-linux
+          path: |
+            build-local/endstone_bedrock_discord_bridge.so
+            config/config.json.example
+            config/config.schema.json
+
+  bot-python:
+    name: Build Companion Bot
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bot package
+        run: python -m pip install -e ./bot
+
+      - name: Build distributable package
+        run: |
+          python -m pip install build
+          python -m build ./bot
+
+      - name: Compile bot sources
+        run: python -m compileall bot/src
+
+      - name: Verify bot CLI
+        run: bedrock-discord-bridge-bot --help
+
+      - name: Upload bot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedrock-discord-bridge-bot-python
+          path: |
+            bot/dist/*
+            plugins/endcord/bot/config.json
+            bot/config.schema.json
