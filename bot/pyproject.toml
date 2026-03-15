@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bedrock-discord-bridge-bot"
+version = "0.1.0"
+description = "Companion Discord bot for the Bedrock Discord Bridge Endstone plugin."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "aiohttp>=3.9,<4",
+  "discord.py==2.7.1",
+]
+
+[project.scripts]
+bedrock-discord-bridge-bot = "bridge_bot.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
