@@ -10,7 +10,8 @@
     "relay",
     "slash_commands",
     "presence",
-    "logging"
+    "logging",
+    "system_messages"
   ],
   "properties": {
     "discord": {
@@ -224,6 +225,37 @@
         },
         "log_presence_updates": {
           "type": "boolean"
+        }
+      }
+    },
+    "system_messages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "channel_id",
+        "poll_interval_seconds",
+        "message_template",
+        "max_messages_per_poll"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "channel_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "poll_interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "message_template": {
+          "type": "string"
+        },
+        "max_messages_per_poll": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

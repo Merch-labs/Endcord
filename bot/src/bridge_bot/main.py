@@ -73,6 +73,15 @@ class LoggingConfig:
 
 
 @dataclass(slots=True)
+class SystemMessageConfig:
+    enabled: bool
+    channel_id: int
+    poll_interval_seconds: int
+    message_template: str
+    max_messages_per_poll: int
+
+
+@dataclass(slots=True)
 class BotConfig:
     discord: DiscordConfig
     plugin_bridge: PluginBridgeConfig
@@ -80,6 +89,7 @@ class BotConfig:
     slash_commands: SlashCommandConfig
     presence: PresenceConfig
     logging: LoggingConfig
+    system_messages: SystemMessageConfig
 
     @staticmethod
     def load(path: Path) -> "BotConfig":
@@ -91,6 +101,7 @@ class BotConfig:
         slash_cfg = data.get("slash_commands", {})
         presence_cfg = data.get("presence", {})
         logging_cfg = data.get("logging", {})
+        system_cfg = data.get("system_messages", {})
 
         config = BotConfig(
             discord=DiscordConfig(
@@ -136,6 +147,13 @@ class BotConfig:
                 log_ignored_messages=bool(logging_cfg.get("log_ignored_messages", False)),
                 log_relay_successes=bool(logging_cfg.get("log_relay_successes", False)),
                 log_presence_updates=bool(logging_cfg.get("log_presence_updates", False)),
+            ),
+            system_messages=SystemMessageConfig(
+                enabled=bool(system_cfg.get("enabled", False)),
+                channel_id=int(system_cfg.get("channel_id", 0)),
+                poll_interval_seconds=max(int(system_cfg.get("poll_interval_seconds", 2)), 1),
+                message_template=str(system_cfg.get("message_template", "{content}")),
+                max_messages_per_poll=max(int(system_cfg.get("max_messages_per_poll", 20)), 1),
             ),
         )
 
@@ -190,6 +208,13 @@ class PluginBridgeClient:
     async def get_status(self) -> dict[str, Any]:
         return await self._request("GET", "/status", None)
 
+    async def drain_system_messages(self) -> list[dict[str, Any]]:
+        data = await self._request("POST", "/system-messages/drain", {})
+        messages = data.get("messages", [])
+        if not isinstance(messages, list):
+            raise RuntimeError("bridge returned invalid system message payload")
+        return [message for message in messages if isinstance(message, dict)]
+
     async def _request(self, method: str, suffix: str, payload: dict[str, Any] | None) -> dict[str, Any]:
         url = f"{self._config.plugin_bridge.base_url}{suffix}"
         headers = {
@@ -225,6 +250,7 @@ class BedrockDiscordBridgeBot(discord.Client):
         self.bridge = PluginBridgeClient(config)
         self.tree = app_commands.CommandTree(self)
         self._presence_task: asyncio.Task[None] | None = None
+        self._system_message_task: asyncio.Task[None] | None = None
         self._register_commands()
 
     async def close(self) -> None:
@@ -232,6 +258,12 @@ class BedrockDiscordBridgeBot(discord.Client):
             self._presence_task.cancel()
             try:
                 await self._presence_task
+            except asyncio.CancelledError:
+                pass
+        if self._system_message_task is not None:
+            self._system_message_task.cancel()
+            try:
+                await self._system_message_task
             except asyncio.CancelledError:
                 pass
         await self.bridge.close()
@@ -252,6 +284,10 @@ class BedrockDiscordBridgeBot(discord.Client):
         LOGGER.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "unknown"))
         if self.config.presence.enabled and (self._presence_task is None or self._presence_task.done()):
             self._presence_task = asyncio.create_task(self._presence_loop())
+        if self.config.system_messages.enabled and (
+            self._system_message_task is None or self._system_message_task.done()
+        ):
+            self._system_message_task = asyncio.create_task(self._system_message_loop())
 
     async def on_message(self, message: discord.Message) -> None:
         if not self.config.discord.relay_to_game_enabled:
@@ -479,6 +515,55 @@ class BedrockDiscordBridgeBot(discord.Client):
     def _log_ignored_message(self, message: discord.Message, reason: str) -> None:
         if self.config.logging.log_ignored_messages:
             LOGGER.debug("Ignoring Discord message %s: %s.", message.id, reason)
+
+    async def _system_message_loop(self) -> None:
+        while not self.is_closed():
+            try:
+                await self._drain_and_send_system_messages()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Failed to relay queued system messages: %s", exc)
+
+            await asyncio.sleep(self.config.system_messages.poll_interval_seconds)
+
+    async def _drain_and_send_system_messages(self) -> None:
+        channel = await self._resolve_system_channel()
+        if channel is None:
+            return
+
+        messages = await self.bridge.drain_system_messages()
+        for payload in messages[: self.config.system_messages.max_messages_per_poll]:
+            content = self._apply_template(
+                self.config.system_messages.message_template,
+                {
+                    "{content}": str(payload.get("content", "")),
+                    "{event}": str(payload.get("event", "")),
+                    "{player_name}": str(payload.get("player_name", "")),
+                },
+            ).strip()
+            if not content:
+                continue
+            await channel.send(content)
+            if self.config.logging.log_relay_successes:
+                LOGGER.info("Sent bot-owned system message for event '%s'.", payload.get("event", "unknown"))
+
+    async def _resolve_system_channel(self):
+        channel_id = self.config.system_messages.channel_id
+        if channel_id <= 0 and self.config.discord.relay_channel_ids:
+            channel_id = self.config.discord.relay_channel_ids[0]
+        if channel_id <= 0:
+            LOGGER.warning("System message relay is enabled but no channel_id is configured.")
+            return None
+
+        channel = self.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.fetch_channel(channel_id)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Failed to resolve system message channel %s: %s", channel_id, exc)
+                return None
+        return channel
 
     @staticmethod
     def _apply_template(template: str, replacements: dict[str, str]) -> str:
