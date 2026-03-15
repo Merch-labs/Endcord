@@ -1,0 +1,35 @@
+{
+  "config_version": 1,
+  "enabled": true,
+  "discord": {
+    "webhook_url": "https://discord.com/api/webhooks/replace-me",
+    "username_template": "{player}",
+    "content_template": "{message}",
+    "allow_mentions": false,
+    "max_username_length": 80,
+    "max_content_length": 2000
+  },
+  "queue": {
+    "max_size": 256,
+    "max_attempts": 5,
+    "retry_delay_ms": 2000,
+    "connect_timeout_ms": 3000,
+    "read_timeout_ms": 5000,
+    "write_timeout_ms": 5000
+  },
+  "avatar": {
+    "enabled": true,
+    "size": 64,
+    "cache_subdirectory": "avatars",
+    "public_base_url": "",
+    "http_server": {
+      "enabled": true,
+      "bind_host": "0.0.0.0",
+      "port": 8089,
+      "route_prefix": "/bedrock-discord-bridge/avatars",
+      "public_base_url": "",
+      "cache_control": "public, max-age=86400",
+      "thread_count": 4
+    }
+  }
+}

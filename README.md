@@ -1,6 +1,6 @@
 # Bedrock Discord Bridge
 
-Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding to Discord with per-player webhook identity and rendered skin-head avatar cache.
+Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding to Discord with JSON config, per-player webhook identity, rendered skin-head avatars, and built-in avatar hosting.
 
 ## What is included
 
@@ -10,7 +10,9 @@ Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding t
 - Rate-limit aware retry path for `429` and transient webhook failures
 - Bedrock skin face plus hat-overlay rendering to PNG
 - Local avatar cache under the plugin data folder
-- Configurable public avatar base URL for Discord `avatar_url`
+- Built-in HTTP server for serving avatar PNGs
+- JSON config with nested sections for Discord, queue, and avatar hosting
+- `/discordbridge status` and `/discordbridge reload`
 
 ## Build on Linux
 
@@ -39,41 +41,48 @@ build-local/endstone_bedrock_discord_bridge.so
 
 ## Config
 
-Copy the example file into the plugin data folder created by Endstone at runtime:
+On first run, the plugin writes a default JSON config to:
 
 ```bash
-cp config/discord.env.example path/to/bedrock_server/plugins/bedrock_discord_bridge/discord.env
+path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
 ```
 
-Then set:
+You can also start from:
 
-```text
-DISCORD_ENABLED=true
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-AVATAR_PUBLIC_BASE_URL=https://cdn.example.com/bedrock-avatars
+```bash
+cp config/config.json.example path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
 ```
+
+Admin commands:
+
+- `/discordbridge status`
+- `/discordbridge reload`
 
 Config notes:
 
-- `DISCORD_WEBHOOK_URL` is required for Minecraft-to-Discord relay.
-- `AVATAR_PUBLIC_BASE_URL` is optional. If unset, chat still forwards, but Discord messages will not get per-player avatar icons.
-- Rendered head PNGs are written under `plugins/bedrock_discord_bridge/avatars/`.
-- `AVATAR_PUBLIC_BASE_URL` should point to an HTTP path that serves those cached PNG files.
-- `MAX_QUEUE_SIZE` controls local buffering when Discord is slow or rate-limiting.
+- `discord.webhook_url` is required for Minecraft-to-Discord relay.
+- `discord.username_template` and `discord.content_template` support `{player}`, `{message}`, `{skin_id}`, and `{server}`.
+- `avatar.enabled` controls skin-head rendering.
+- `avatar.public_base_url` is a direct override if you already host the avatar cache elsewhere.
+- `avatar.http_server` can serve the avatar cache directly from the plugin.
+- If `avatar.http_server.public_base_url` is set, the plugin uses it to build Discord `avatar_url` values.
+- If `avatar.public_base_url` and `avatar.http_server.public_base_url` are both empty, the plugin derives a local base URL only when `bind_host` is not a wildcard address.
+- `queue.max_size`, `queue.max_attempts`, and timeout values control webhook behavior under load.
 
 ## Avatar hosting
 
 Discord webhook `avatar_url` must be a URL Discord can fetch. This plugin generates and caches PNGs locally, then maps them to:
 
 ```text
-AVATAR_PUBLIC_BASE_URL/<skin-hash>.png
+<effective-avatar-base-url>/<skin-hash>.png
 ```
 
 Practical production path:
 
-1. Point your web server at `plugins/bedrock_discord_bridge/avatars/`.
-2. Set `AVATAR_PUBLIC_BASE_URL` to the public URL for that directory.
-3. Let the plugin render and reuse cached head icons by skin hash.
+1. Enable `avatar.http_server`.
+2. Expose its route publicly through a reverse proxy or direct port forward.
+3. Set `avatar.http_server.public_base_url` to the public URL for that route.
+4. Let the plugin render and reuse cached head icons by skin hash.
 
 This keeps the plugin simple and fast while still matching the mature webhook-avatar pattern used by established Discord bridges.
 
@@ -89,7 +98,7 @@ Practical avatar path:
 1. Read Bedrock skin RGBA data from `player.getSkin().getImage()`.
 2. Extract the face region and hat/overlay region into a square head render.
 3. Write the PNG to the local avatar cache.
-4. Publish that cache directory behind a stable public URL.
+4. Publish that cache directory behind a stable public URL or the built-in avatar HTTP server.
 5. Reuse the resulting `avatar_url` for subsequent webhook messages until the skin hash changes.
 
 Rate-limit strategy:
@@ -104,5 +113,6 @@ Rate-limit strategy:
 
 - Implemented: Minecraft-to-Discord relay via webhook
 - Implemented: local avatar rendering/cache pipeline for Bedrock skins
+- Implemented: built-in avatar HTTP server and JSON config
 - Implemented: Linux `.so` build path for Endstone
-- Not yet implemented: Discord bot component for Discord-to-Minecraft relay, slash commands, and admin workflows
+- Not implemented by design: Discord bot/gateway side. Mature bridges typically keep that as a separate bot process or service from the game plugin.

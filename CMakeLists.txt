@@ -25,8 +25,13 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/lvandeve/lodepng.git
     GIT_TAG 22561883dd63fd1850f18e1f6adac321e4f609b0
 )
+FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+)
 FetchContent_MakeAvailable(endstone)
 FetchContent_MakeAvailable(cpp_httplib)
+FetchContent_MakeAvailable(nlohmann_json)
 FetchContent_GetProperties(lodepng)
 if (NOT lodepng_POPULATED)
     FetchContent_Populate(lodepng)
@@ -37,4 +42,4 @@ target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
 
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} PRIVATE httplib::httplib lodepng)
+target_link_libraries(${PROJECT_NAME} PRIVATE httplib::httplib lodepng nlohmann_json::nlohmann_json)

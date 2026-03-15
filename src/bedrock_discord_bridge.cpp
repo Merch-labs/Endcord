@@ -2,31 +2,56 @@
 
 #include <httplib.h>
 #include <lodepng.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <regex>
 #include <sstream>
 #include <system_error>
+#include <utility>
 
 namespace fs = std::filesystem;
+using json = nlohmann::json;
 
 ENDSTONE_PLUGIN(/*name=*/"bedrock_discord_bridge",
-                /*version=*/"0.2.0",
+                /*version=*/"0.3.0",
                 /*main_class=*/BedrockDiscordBridgePlugin)
 {
     prefix = "BedrockDiscordBridge";
-    description = "Endstone C++ Bedrock-to-Discord bridge with webhook queue and skin-head avatar cache.";
+    description = "Endstone C++ Bedrock-to-Discord bridge with JSON config, webhook queue, and skin-head avatar cache.";
     authors = {"Bedrock Discord Bridge contributors"};
+
+    command("discordbridge")
+        .description("Inspect or reload the Bedrock Discord bridge.")
+        .usages("/discordbridge status", "/discordbridge reload")
+        .aliases("dbbridge")
+        .permissions("bedrock_discord_bridge.command.status", "bedrock_discord_bridge.command.reload");
+
+    permission("bedrock_discord_bridge.command")
+        .description("Allows use of all Bedrock Discord bridge commands.")
+        .children("bedrock_discord_bridge.command.status", true)
+        .children("bedrock_discord_bridge.command.reload", true);
+
+    permission("bedrock_discord_bridge.command.status")
+        .description("Allows viewing Bedrock Discord bridge status.")
+        .default_(endstone::PermissionDefault::Operator);
+
+    permission("bedrock_discord_bridge.command.reload")
+        .description("Allows reloading Bedrock Discord bridge configuration.")
+        .default_(endstone::PermissionDefault::Operator);
 }
 
 BedrockDiscordBridgePlugin::~BedrockDiscordBridgePlugin()
 {
+    stopAvatarServer();
     stopWorker();
 }
 
@@ -38,17 +63,57 @@ void BedrockDiscordBridgePlugin::onLoad()
 void BedrockDiscordBridgePlugin::onEnable()
 {
     ensureDataFolder();
-    loadDiscordSettings();
+    writeDefaultConfigIfMissing();
+    loadConfig();
     registerEvent(&BedrockDiscordBridgePlugin::onPlayerChat, *this);
-    startWorker();
+    restartRuntime();
 
     getLogger().info("Plugin enabled. Chat forwarding pipeline is active.");
 }
 
 void BedrockDiscordBridgePlugin::onDisable()
 {
+    stopAvatarServer();
     stopWorker();
     getLogger().info("Plugin disabled.");
+}
+
+bool BedrockDiscordBridgePlugin::onCommand(endstone::CommandSender &sender, const endstone::Command &command,
+                                           const std::vector<std::string> &args)
+{
+    if (command.getName() != "discordbridge") {
+        return false;
+    }
+
+    const auto subcommand = args.empty() ? std::string("status") : args[0];
+    if (subcommand == "status") {
+        if (!sender.hasPermission("bedrock_discord_bridge.command.status")) {
+            sender.sendErrorMessage("You do not have permission to view bridge status.");
+            return true;
+        }
+
+        sendStatus(sender);
+        return true;
+    }
+
+    if (subcommand == "reload") {
+        if (!sender.hasPermission("bedrock_discord_bridge.command.reload")) {
+            sender.sendErrorMessage("You do not have permission to reload bridge configuration.");
+            return true;
+        }
+
+        stopAvatarServer();
+        stopWorker();
+        clearQueue();
+        avatar_cache_.clear();
+        loadConfig();
+        restartRuntime();
+        sender.sendMessage("Bedrock Discord bridge configuration reloaded from '{}'.", getConfigPath().string());
+        return true;
+    }
+
+    sender.sendErrorMessage("Usage: /discordbridge <status|reload>");
+    return true;
 }
 
 void BedrockDiscordBridgePlugin::onPlayerChat(endstone::PlayerChatEvent &event)
@@ -67,112 +132,236 @@ void BedrockDiscordBridgePlugin::ensureDataFolder() const
     if (ec) {
         getLogger().warning("Could not create plugin data folder '{}': {}", getDataFolder().string(), ec.message());
     }
-
-    fs::create_directories(getDataFolder() / "avatars", ec);
-    if (ec) {
-        getLogger().warning("Could not create avatar cache folder '{}': {}", (getDataFolder() / "avatars").string(),
-                            ec.message());
-    }
 }
 
-void BedrockDiscordBridgePlugin::loadDiscordSettings()
+void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
 {
-    settings_ = {};
+    const auto config_path = getConfigPath();
+    if (fs::exists(config_path)) {
+        return;
+    }
+
+    json root = {
+        {"config_version", 1},
+        {"enabled", true},
+        {"discord",
+         {{"webhook_url", ""},
+          {"username_template", "{player}"},
+          {"content_template", "{message}"},
+          {"allow_mentions", false},
+          {"max_username_length", 80},
+          {"max_content_length", 2000}}},
+        {"queue",
+         {{"max_size", 256},
+          {"max_attempts", 5},
+          {"retry_delay_ms", 2000},
+          {"connect_timeout_ms", 3000},
+          {"read_timeout_ms", 5000},
+          {"write_timeout_ms", 5000}}},
+        {"avatar",
+         {{"enabled", true},
+          {"size", 64},
+          {"cache_subdirectory", "avatars"},
+          {"public_base_url", ""},
+          {"http_server",
+           {{"enabled", true},
+            {"bind_host", "0.0.0.0"},
+            {"port", 8089},
+            {"route_prefix", "/bedrock-discord-bridge/avatars"},
+            {"public_base_url", ""},
+            {"cache_control", "public, max-age=86400"},
+            {"thread_count", 4}}}}}
+    };
+
+    std::ofstream output(config_path);
+    output << root.dump(2) << '\n';
+    getLogger().info("Wrote default config to '{}'.", config_path.string());
+}
+
+void BedrockDiscordBridgePlugin::loadConfig()
+{
+    config_ = {};
     webhook_target_.reset();
 
-    const auto config_path = getDataFolder() / "discord.env";
+    const auto config_path = getConfigPath();
     std::ifstream input(config_path);
     if (!input.is_open()) {
-        getLogger().warning(
-            "No Discord config found at '{}'. Copy config/discord.env.example there and set DISCORD_WEBHOOK_URL.",
-            config_path.string());
+        getLogger().warning("Could not open config '{}'. Using defaults.", config_path.string());
         return;
     }
 
-    std::string line;
-    while (std::getline(input, line)) {
-        const auto trimmed = trim(line);
-        if (trimmed.empty() || trimmed.starts_with('#')) {
-            continue;
+    try {
+        json root = json::parse(input);
+
+        if (root.contains("config_version") && root["config_version"].is_number_integer()) {
+            config_.config_version = root["config_version"].get<int>();
+        }
+        if (root.contains("enabled") && root["enabled"].is_boolean()) {
+            config_.enabled = root["enabled"].get<bool>();
         }
 
-        const auto separator = trimmed.find('=');
-        if (separator == std::string::npos) {
-            continue;
+        if (root.contains("discord") && root["discord"].is_object()) {
+            const auto &discord = root["discord"];
+            if (discord.contains("webhook_url") && discord["webhook_url"].is_string()) {
+                config_.discord.webhook_url = discord["webhook_url"].get<std::string>();
+            }
+            if (discord.contains("username_template") && discord["username_template"].is_string()) {
+                config_.discord.username_template = discord["username_template"].get<std::string>();
+            }
+            if (discord.contains("content_template") && discord["content_template"].is_string()) {
+                config_.discord.content_template = discord["content_template"].get<std::string>();
+            }
+            if (discord.contains("allow_mentions") && discord["allow_mentions"].is_boolean()) {
+                config_.discord.allow_mentions = discord["allow_mentions"].get<bool>();
+            }
+            if (discord.contains("max_username_length") && discord["max_username_length"].is_number_integer()) {
+                config_.discord.max_username_length = discord["max_username_length"].get<int>();
+            }
+            if (discord.contains("max_content_length") && discord["max_content_length"].is_number_integer()) {
+                config_.discord.max_content_length = discord["max_content_length"].get<int>();
+            }
         }
 
-        const auto key = trim(trimmed.substr(0, separator));
-        const auto value = trim(trimmed.substr(separator + 1));
-        if (key == "DISCORD_WEBHOOK_URL") {
-            settings_.webhook_url = value;
+        if (root.contains("queue") && root["queue"].is_object()) {
+            const auto &queue = root["queue"];
+            if (queue.contains("max_size") && queue["max_size"].is_number_integer()) {
+                config_.queue.max_size = queue["max_size"].get<int>();
+            }
+            if (queue.contains("max_attempts") && queue["max_attempts"].is_number_integer()) {
+                config_.queue.max_attempts = queue["max_attempts"].get<int>();
+            }
+            if (queue.contains("retry_delay_ms") && queue["retry_delay_ms"].is_number_integer()) {
+                config_.queue.retry_delay_ms = queue["retry_delay_ms"].get<int>();
+            }
+            if (queue.contains("connect_timeout_ms") && queue["connect_timeout_ms"].is_number_integer()) {
+                config_.queue.connect_timeout_ms = queue["connect_timeout_ms"].get<int>();
+            }
+            if (queue.contains("read_timeout_ms") && queue["read_timeout_ms"].is_number_integer()) {
+                config_.queue.read_timeout_ms = queue["read_timeout_ms"].get<int>();
+            }
+            if (queue.contains("write_timeout_ms") && queue["write_timeout_ms"].is_number_integer()) {
+                config_.queue.write_timeout_ms = queue["write_timeout_ms"].get<int>();
+            }
         }
-        else if (key == "DISCORD_ENABLED") {
-            settings_.enabled = parseBool(value, settings_.enabled);
-        }
-        else if (key == "AVATAR_PUBLIC_BASE_URL") {
-            settings_.avatar_public_base_url = value;
-        }
-        else if (key == "WEBHOOK_CONNECT_TIMEOUT_MS") {
-            settings_.connect_timeout_ms = parseInt(value, settings_.connect_timeout_ms);
-        }
-        else if (key == "WEBHOOK_READ_TIMEOUT_MS") {
-            settings_.read_timeout_ms = parseInt(value, settings_.read_timeout_ms);
-        }
-        else if (key == "WEBHOOK_WRITE_TIMEOUT_MS") {
-            settings_.write_timeout_ms = parseInt(value, settings_.write_timeout_ms);
-        }
-        else if (key == "MAX_QUEUE_SIZE") {
-            settings_.max_queue_size = parseInt(value, settings_.max_queue_size);
-        }
-        else if (key == "AVATAR_SIZE") {
-            settings_.avatar_size = parseInt(value, settings_.avatar_size);
+
+        if (root.contains("avatar") && root["avatar"].is_object()) {
+            const auto &avatar = root["avatar"];
+            if (avatar.contains("enabled") && avatar["enabled"].is_boolean()) {
+                config_.avatar.enabled = avatar["enabled"].get<bool>();
+            }
+            if (avatar.contains("size") && avatar["size"].is_number_integer()) {
+                config_.avatar.size = avatar["size"].get<int>();
+            }
+            if (avatar.contains("cache_subdirectory") && avatar["cache_subdirectory"].is_string()) {
+                config_.avatar.cache_subdirectory = avatar["cache_subdirectory"].get<std::string>();
+            }
+            if (avatar.contains("public_base_url") && avatar["public_base_url"].is_string()) {
+                config_.avatar.public_base_url = avatar["public_base_url"].get<std::string>();
+            }
+
+            if (avatar.contains("http_server") && avatar["http_server"].is_object()) {
+                const auto &http = avatar["http_server"];
+                if (http.contains("enabled") && http["enabled"].is_boolean()) {
+                    config_.avatar.http_server.enabled = http["enabled"].get<bool>();
+                }
+                if (http.contains("bind_host") && http["bind_host"].is_string()) {
+                    config_.avatar.http_server.bind_host = http["bind_host"].get<std::string>();
+                }
+                if (http.contains("port") && http["port"].is_number_integer()) {
+                    config_.avatar.http_server.port = http["port"].get<int>();
+                }
+                if (http.contains("route_prefix") && http["route_prefix"].is_string()) {
+                    config_.avatar.http_server.route_prefix = http["route_prefix"].get<std::string>();
+                }
+                if (http.contains("public_base_url") && http["public_base_url"].is_string()) {
+                    config_.avatar.http_server.public_base_url = http["public_base_url"].get<std::string>();
+                }
+                if (http.contains("cache_control") && http["cache_control"].is_string()) {
+                    config_.avatar.http_server.cache_control = http["cache_control"].get<std::string>();
+                }
+                if (http.contains("thread_count") && http["thread_count"].is_number_integer()) {
+                    config_.avatar.http_server.thread_count = http["thread_count"].get<int>();
+                }
+            }
         }
     }
-
-    settings_.connect_timeout_ms = std::max(settings_.connect_timeout_ms, 250);
-    settings_.read_timeout_ms = std::max(settings_.read_timeout_ms, 250);
-    settings_.write_timeout_ms = std::max(settings_.write_timeout_ms, 250);
-    settings_.max_queue_size = std::max(settings_.max_queue_size, 1);
-    settings_.avatar_size = std::clamp(settings_.avatar_size, 8, 512);
-
-    if (!settings_.avatar_public_base_url.empty() && settings_.avatar_public_base_url.ends_with('/')) {
-        settings_.avatar_public_base_url.pop_back();
-    }
-
-    if (!settings_.enabled) {
-        getLogger().warning("Discord bridge is disabled by config.");
+    catch (const std::exception &e) {
+        getLogger().error("Failed to parse config '{}': {}", config_path.string(), e.what());
         return;
     }
 
-    if (settings_.webhook_url.empty()) {
-        getLogger().warning("DISCORD_WEBHOOK_URL is empty in '{}'.", config_path.string());
+    config_.discord.max_username_length = std::clamp(config_.discord.max_username_length, 1, 80);
+    config_.discord.max_content_length = std::clamp(config_.discord.max_content_length, 1, 2000);
+    config_.queue.max_size = std::max(config_.queue.max_size, 1);
+    config_.queue.max_attempts = std::clamp(config_.queue.max_attempts, 1, 20);
+    config_.queue.retry_delay_ms = std::max(config_.queue.retry_delay_ms, 100);
+    config_.queue.connect_timeout_ms = std::max(config_.queue.connect_timeout_ms, 100);
+    config_.queue.read_timeout_ms = std::max(config_.queue.read_timeout_ms, 100);
+    config_.queue.write_timeout_ms = std::max(config_.queue.write_timeout_ms, 100);
+    config_.avatar.size = std::clamp(config_.avatar.size, 8, 512);
+    config_.avatar.http_server.port = std::clamp(config_.avatar.http_server.port, 1, 65535);
+    config_.avatar.http_server.thread_count = std::clamp(config_.avatar.http_server.thread_count, 1, 64);
+    config_.avatar.http_server.route_prefix = normalizeRoutePrefix(config_.avatar.http_server.route_prefix);
+
+    if (!config_.avatar.public_base_url.empty() && config_.avatar.public_base_url.ends_with('/')) {
+        config_.avatar.public_base_url.pop_back();
     }
-    else {
-        webhook_target_ = parseWebhookUrl(settings_.webhook_url);
+    if (!config_.avatar.http_server.public_base_url.empty() && config_.avatar.http_server.public_base_url.ends_with('/')) {
+        config_.avatar.http_server.public_base_url.pop_back();
+    }
+
+    if (!config_.discord.webhook_url.empty()) {
+        webhook_target_ = parseWebhookUrl(config_.discord.webhook_url);
         if (!webhook_target_) {
-            getLogger().error("DISCORD_WEBHOOK_URL is invalid and could not be parsed.");
+            getLogger().error("Configured Discord webhook URL is invalid.");
         }
     }
 
-    getLogger().info("Loaded Discord configuration. Avatar public base URL is {}configured.",
-                     settings_.avatar_public_base_url.empty() ? "not " : "");
+    getLogger().info("Loaded config version {} from '{}'.", config_.config_version, config_path.string());
+}
+
+void BedrockDiscordBridgePlugin::restartRuntime()
+{
+    clearQueue();
+    avatar_cache_.clear();
+
+    std::error_code ec;
+    fs::create_directories(getAvatarCacheDir(), ec);
+    if (ec) {
+        getLogger().warning("Could not create avatar cache directory '{}': {}", getAvatarCacheDir().string(),
+                            ec.message());
+    }
+
+    if (!config_.enabled) {
+        getLogger().warning("Bridge is disabled in config.");
+        return;
+    }
+
+    startAvatarServer();
+    startWorker();
+}
+
+void BedrockDiscordBridgePlugin::clearQueue()
+{
+    std::lock_guard lock(queue_mutex_);
+    webhook_queue_.clear();
+    next_request_at_ = std::chrono::steady_clock::now();
 }
 
 void BedrockDiscordBridgePlugin::startWorker()
 {
     stopWorker();
 
-    if (!settings_.enabled) {
+    if (!config_.enabled) {
         return;
     }
 
     if (!webhook_target_) {
-        getLogger().warning("Webhook worker not started because DISCORD_WEBHOOK_URL is missing or invalid.");
+        getLogger().warning("Webhook worker not started because the Discord webhook URL is missing or invalid.");
         return;
     }
 
     stop_worker_ = false;
-    worker_running_ = true;
     next_request_at_ = std::chrono::steady_clock::now();
     worker_thread_ = std::thread(&BedrockDiscordBridgePlugin::workerLoop, this);
     getLogger().info("Webhook worker started.");
@@ -189,8 +378,63 @@ void BedrockDiscordBridgePlugin::stopWorker()
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
+}
 
-    worker_running_ = false;
+void BedrockDiscordBridgePlugin::startAvatarServer()
+{
+    stopAvatarServer();
+
+    if (!config_.enabled || !config_.avatar.enabled || !config_.avatar.http_server.enabled) {
+        return;
+    }
+
+    avatar_server_ = std::make_unique<httplib::Server>();
+    avatar_server_->set_file_extension_and_mimetype_mapping("png", "image/png");
+    avatar_server_->set_default_headers({{"Cache-Control", config_.avatar.http_server.cache_control}});
+    avatar_server_->new_task_queue = [thread_count = static_cast<size_t>(config_.avatar.http_server.thread_count)] {
+        return new httplib::ThreadPool(thread_count);
+    };
+
+    const auto cache_dir = getAvatarCacheDir().string();
+    if (!avatar_server_->set_mount_point(config_.avatar.http_server.route_prefix, cache_dir)) {
+        getLogger().error("Failed to mount avatar cache directory '{}' at route '{}'.", cache_dir,
+                          config_.avatar.http_server.route_prefix);
+        avatar_server_.reset();
+        return;
+    }
+
+    avatar_server_->set_logger([this](const auto &req, const auto &res) {
+        if (res.status >= 400) {
+            getLogger().debug("Avatar HTTP {} {} -> {}", req.method, req.path, res.status);
+        }
+    });
+
+    const auto host = config_.avatar.http_server.bind_host;
+    const auto port = config_.avatar.http_server.port;
+    avatar_server_thread_ = std::thread([this, host, port] {
+        if (!avatar_server_) {
+            return;
+        }
+
+        if (!avatar_server_->listen(host.c_str(), port)) {
+            getLogger().error("Avatar HTTP server failed to listen on {}:{}.", host, port);
+        }
+    });
+
+    getLogger().info("Avatar HTTP server starting on {}:{}{}.", host, port, config_.avatar.http_server.route_prefix);
+}
+
+void BedrockDiscordBridgePlugin::stopAvatarServer()
+{
+    if (avatar_server_) {
+        avatar_server_->stop();
+    }
+
+    if (avatar_server_thread_.joinable()) {
+        avatar_server_thread_.join();
+    }
+
+    avatar_server_.reset();
 }
 
 void BedrockDiscordBridgePlugin::workerLoop()
@@ -229,36 +473,78 @@ void BedrockDiscordBridgePlugin::workerLoop()
 
 void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &player, const std::string &message)
 {
-    if (!settings_.enabled) {
+    if (!config_.enabled) {
         return;
     }
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
+    const auto skin = player.getSkin();
+    auto username = applyTemplate(config_.discord.username_template, player.getName(), message, skin.getId(),
+                                  getServer().getName());
+    auto content = applyTemplate(config_.discord.content_template, player.getName(), message, skin.getId(),
+                                 getServer().getName());
+
+    if (username.empty()) {
+        username = player.getName();
+    }
+    if (content.empty()) {
+        content = message;
+    }
+
+    if (static_cast<int>(username.size()) > config_.discord.max_username_length) {
+        username.resize(static_cast<std::size_t>(config_.discord.max_username_length));
+    }
+    if (static_cast<int>(content.size()) > config_.discord.max_content_length) {
+        const auto limit = static_cast<std::size_t>(std::max(config_.discord.max_content_length - 3, 0));
+        content = content.substr(0, limit) + "...";
+    }
 
     std::ostringstream payload;
     payload << "{"
-            << "\"username\":\"" << escapeJson(player.getName()) << "\","
-            << "\"content\":\"" << escapeJson(message) << "\"";
+            << "\"username\":\"" << escapeJson(username) << "\","
+            << "\"content\":\"" << escapeJson(content) << "\"";
     if (avatar_url.has_value()) {
         payload << ",\"avatar_url\":\"" << escapeJson(*avatar_url) << "\"";
+    }
+    if (!config_.discord.allow_mentions) {
+        payload << ",\"allowed_mentions\":{\"parse\":[]}";
     }
     payload << "}";
 
     if (!webhook_target_) {
-        getLogger().debug("Skipping Discord webhook POST because DISCORD_WEBHOOK_URL is not configured.");
+        getLogger().debug("Skipping Discord webhook POST because the Discord webhook URL is not configured.");
         return;
     }
 
     enqueueWebhookPayload({player.getName(), payload.str(), 0});
 }
 
+void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) const
+{
+    std::size_t queue_depth = 0;
+    {
+        std::lock_guard lock(queue_mutex_);
+        queue_depth = webhook_queue_.size();
+    }
+
+    sender.sendMessage("Bridge enabled: {}", config_.enabled ? "yes" : "no");
+    sender.sendMessage("Webhook configured: {}", webhook_target_.has_value() ? "yes" : "no");
+    sender.sendMessage("Webhook queue depth: {}", queue_depth);
+    sender.sendMessage("Avatar rendering enabled: {}", config_.avatar.enabled ? "yes" : "no");
+    sender.sendMessage("Avatar cache dir: {}", getAvatarCacheDir().string());
+    sender.sendMessage("Avatar HTTP server enabled: {}", config_.avatar.http_server.enabled ? "yes" : "no");
+    sender.sendMessage("Avatar HTTP server running: {}",
+                       (avatar_server_ && avatar_server_->is_running()) ? "yes" : "no");
+    sender.sendMessage("Avatar public base URL: {}", getEffectiveAvatarBaseUrl().value_or("<not configured>"));
+}
+
 void BedrockDiscordBridgePlugin::enqueueWebhookPayload(WebhookJob job)
 {
     std::lock_guard lock(queue_mutex_);
 
-    if (static_cast<int>(webhook_queue_.size()) >= settings_.max_queue_size) {
+    if (static_cast<int>(webhook_queue_.size()) >= config_.queue.max_size) {
         getLogger().warning("Dropping Discord webhook payload for '{}' because the queue is full ({} items).",
-                            job.player_name, settings_.max_queue_size);
+                            job.player_name, config_.queue.max_size);
         return;
     }
 
@@ -273,22 +559,22 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
     }
 
     httplib::Client client(webhook_target_->origin);
-    client.set_connection_timeout(std::chrono::milliseconds(settings_.connect_timeout_ms));
-    client.set_read_timeout(std::chrono::milliseconds(settings_.read_timeout_ms));
-    client.set_write_timeout(std::chrono::milliseconds(settings_.write_timeout_ms));
+    client.set_connection_timeout(std::chrono::milliseconds(config_.queue.connect_timeout_ms));
+    client.set_read_timeout(std::chrono::milliseconds(config_.queue.read_timeout_ms));
+    client.set_write_timeout(std::chrono::milliseconds(config_.queue.write_timeout_ms));
     client.set_follow_location(true);
-    client.set_default_headers({{"User-Agent", "bedrock_discord_bridge/0.2.0"}});
+    client.set_default_headers({{"User-Agent", "bedrock_discord_bridge/0.3.0"}});
 
     auto result = client.Post(webhook_target_->path.c_str(), job.payload, "application/json");
     if (!result) {
         getLogger().warning("Discord webhook POST failed for '{}': {}", job.player_name,
                             httplib::to_string(result.error()));
 
-        if (job.attempt < 3) {
+        if (job.attempt < config_.queue.max_attempts) {
             job.attempt++;
             {
                 std::lock_guard lock(queue_mutex_);
-                next_request_at_ = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+                next_request_at_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(config_.queue.retry_delay_ms);
                 webhook_queue_.push_front(std::move(job));
             }
             queue_cv_.notify_one();
@@ -307,7 +593,7 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
     }
 
     if (result->status == 429 || result->status >= 500) {
-        std::int64_t delay_ms = 2000;
+        std::int64_t delay_ms = config_.queue.retry_delay_ms;
         if (const auto header_delay = parseRetryDelayMs(result->get_header_value("Retry-After"))) {
             delay_ms = *header_delay;
         }
@@ -320,7 +606,7 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
 
         getLogger().warning("Discord webhook returned status {} for '{}'. Retrying in {} ms.", result->status,
                             job.player_name, delay_ms);
-        if (job.attempt < 5) {
+        if (job.attempt < config_.queue.max_attempts) {
             job.attempt++;
             {
                 std::lock_guard lock(queue_mutex_);
@@ -337,8 +623,12 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
 
 std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(const endstone::Player &player)
 {
+    if (!config_.avatar.enabled) {
+        return std::nullopt;
+    }
+
     const auto skin = player.getSkin();
-    const auto skin_key = computeSkinCacheKey(skin);
+    const auto skin_key = computeSkinCacheKey(skin, config_.avatar.size);
 
     if (const auto it = avatar_cache_.find(skin_key); it != avatar_cache_.end()) {
         return it->second.public_url;
@@ -356,17 +646,17 @@ std::optional<BedrockDiscordBridgePlugin::AvatarCacheEntry>
 BedrockDiscordBridgePlugin::renderAvatarIfNeeded(const endstone::Player &player)
 {
     const auto skin = player.getSkin();
-    const auto skin_key = computeSkinCacheKey(skin);
+    const auto skin_key = computeSkinCacheKey(skin, config_.avatar.size);
     const auto avatar_file_name = skin_key + ".png";
-    const auto avatar_path = getDataFolder() / "avatars" / avatar_file_name;
+    const auto avatar_path = getAvatarCacheDir() / avatar_file_name;
 
     if (!fs::exists(avatar_path) && !writeHeadPng(skin, avatar_path)) {
         return std::nullopt;
     }
 
     AvatarCacheEntry entry{avatar_path, std::nullopt};
-    if (!settings_.avatar_public_base_url.empty()) {
-        entry.public_url = joinUrl(settings_.avatar_public_base_url, avatar_file_name);
+    if (const auto base_url = getEffectiveAvatarBaseUrl()) {
+        entry.public_url = joinUrl(*base_url, avatar_file_name);
     }
 
     return entry;
@@ -382,7 +672,7 @@ bool BedrockDiscordBridgePlugin::writeHeadPng(const endstone::Skin &skin, const 
         return false;
     }
 
-    const auto rgba = renderHeadRgba(skin.getImage(), settings_.avatar_size);
+    const auto rgba = renderHeadRgba(skin.getImage(), config_.avatar.size);
     if (rgba.empty()) {
         getLogger().warning("Could not render a Discord avatar from skin '{}': unsupported skin dimensions {}x{}.",
                             skin.getId(), skin.getImage().getWidth(), skin.getImage().getHeight());
@@ -390,8 +680,8 @@ bool BedrockDiscordBridgePlugin::writeHeadPng(const endstone::Skin &skin, const 
     }
 
     const auto error = lodepng::encode(output_path.string(), rgba,
-                                       static_cast<unsigned>(settings_.avatar_size),
-                                       static_cast<unsigned>(settings_.avatar_size));
+                                       static_cast<unsigned>(config_.avatar.size),
+                                       static_cast<unsigned>(config_.avatar.size));
     if (error != 0U) {
         getLogger().warning("Failed to encode avatar PNG '{}': {}", output_path.string(), lodepng_error_text(error));
         return false;
@@ -499,7 +789,7 @@ endstone::Color BedrockDiscordBridgePlugin::alphaBlend(endstone::Color base, end
     return endstone::Color::fromRGBA(out_red, out_green, out_blue, out_alpha);
 }
 
-std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin &skin)
+std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin &skin, int avatar_size)
 {
     constexpr std::uint64_t fnv_offset = 1469598103934665603ULL;
     constexpr std::uint64_t fnv_prime = 1099511628211ULL;
@@ -514,6 +804,9 @@ std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin
         mix(static_cast<unsigned char>(ch));
     }
 
+    mix(static_cast<unsigned char>(avatar_size & 0xff));
+    mix(static_cast<unsigned char>((avatar_size >> 8) & 0xff));
+
     const auto &image = skin.getImage();
     mix(static_cast<unsigned char>(image.getWidth() & 0xff));
     mix(static_cast<unsigned char>((image.getWidth() >> 8) & 0xff));
@@ -527,6 +820,32 @@ std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin
     std::ostringstream stream;
     stream << std::hex << hash;
     return stream.str();
+}
+
+std::string BedrockDiscordBridgePlugin::applyTemplate(std::string value, const std::string &player_name,
+                                                      const std::string &message, const std::string &skin_id,
+                                                      const std::string &server_name)
+{
+    value = replaceAll(std::move(value), "{player}", player_name);
+    value = replaceAll(std::move(value), "{message}", message);
+    value = replaceAll(std::move(value), "{skin_id}", skin_id);
+    value = replaceAll(std::move(value), "{server}", server_name);
+    return value;
+}
+
+std::string BedrockDiscordBridgePlugin::replaceAll(std::string value, const std::string &needle,
+                                                   const std::string &replacement)
+{
+    if (needle.empty()) {
+        return value;
+    }
+
+    std::size_t pos = 0;
+    while ((pos = value.find(needle, pos)) != std::string::npos) {
+        value.replace(pos, needle.size(), replacement);
+        pos += replacement.size();
+    }
+    return value;
 }
 
 std::optional<BedrockDiscordBridgePlugin::WebhookTarget>
@@ -567,6 +886,27 @@ std::optional<std::int64_t> BedrockDiscordBridgePlugin::parseRetryDelayMsFromBod
     return parseRetryDelayMs(match[1].str());
 }
 
+std::string BedrockDiscordBridgePlugin::normalizeRoutePrefix(const std::string &value)
+{
+    if (value.empty() || value == "/") {
+        return "/avatars";
+    }
+
+    std::string route = value;
+    if (!route.starts_with('/')) {
+        route.insert(route.begin(), '/');
+    }
+    while (route.size() > 1 && route.ends_with('/')) {
+        route.pop_back();
+    }
+    return route;
+}
+
+bool BedrockDiscordBridgePlugin::isWildcardHost(const std::string &host)
+{
+    return host == "0.0.0.0" || host == "::" || host == "[::]";
+}
+
 std::string BedrockDiscordBridgePlugin::joinUrl(const std::string &base, const std::string &leaf)
 {
     if (base.empty()) {
@@ -578,46 +918,40 @@ std::string BedrockDiscordBridgePlugin::joinUrl(const std::string &base, const s
     return base + "/" + leaf;
 }
 
-std::string BedrockDiscordBridgePlugin::trim(const std::string &value)
+std::filesystem::path BedrockDiscordBridgePlugin::getConfigPath() const
 {
-    const auto start = value.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) {
-        return "";
-    }
-
-    const auto end = value.find_last_not_of(" \t\r\n");
-    auto trimmed = value.substr(start, end - start + 1);
-    if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
-        trimmed = trimmed.substr(1, trimmed.size() - 2);
-    }
-    return trimmed;
+    return getDataFolder() / "config.json";
 }
 
-bool BedrockDiscordBridgePlugin::parseBool(const std::string &value, bool fallback)
+std::filesystem::path BedrockDiscordBridgePlugin::getAvatarCacheDir() const
 {
-    std::string normalized;
-    normalized.reserve(value.size());
-    for (const auto ch : value) {
-        normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-
-    if (normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "on") {
-        return true;
-    }
-    if (normalized == "false" || normalized == "0" || normalized == "no" || normalized == "off") {
-        return false;
-    }
-    return fallback;
+    return getDataFolder() / config_.avatar.cache_subdirectory;
 }
 
-int BedrockDiscordBridgePlugin::parseInt(const std::string &value, int fallback)
+std::optional<std::string> BedrockDiscordBridgePlugin::getEffectiveAvatarBaseUrl() const
 {
-    try {
-        return std::stoi(value);
+    if (!config_.avatar.enabled) {
+        return std::nullopt;
     }
-    catch (...) {
-        return fallback;
+
+    if (!config_.avatar.public_base_url.empty()) {
+        return config_.avatar.public_base_url;
     }
+
+    if (!config_.avatar.http_server.enabled) {
+        return std::nullopt;
+    }
+
+    if (!config_.avatar.http_server.public_base_url.empty()) {
+        return config_.avatar.http_server.public_base_url;
+    }
+
+    if (!isWildcardHost(config_.avatar.http_server.bind_host)) {
+        return "http://" + config_.avatar.http_server.bind_host + ":" +
+               std::to_string(config_.avatar.http_server.port) + config_.avatar.http_server.route_prefix;
+    }
+
+    return std::nullopt;
 }
 
 std::string BedrockDiscordBridgePlugin::escapeJson(const std::string &value)
