@@ -1,14 +1,16 @@
 # Bedrock Discord Bridge
 
-Linux-ready Endstone C++ plugin skeleton for Minecraft Bedrock chat forwarding to Discord.
+Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding to Discord with per-player webhook identity and rendered skin-head avatar cache.
 
 ## What is included
 
-- Endstone C++ plugin scaffold using `FetchContent` and `endstone_add_plugin(...)`
-- Verified `PlayerChatEvent` listener stub
-- Verified `Player::getSkin()` and `Skin::getImage()` usage for future avatar/head rendering
-- Simple `discord.env` config format to avoid adding an unverified parser dependency
-- Placeholders for webhook delivery, skin head extraction, and avatar caching
+- Endstone C++ plugin build pinned to `v0.11.2`
+- Linux build flow that works without sudo by bootstrapping `libc++` locally
+- Async Discord webhook worker so chat events do not block on network I/O
+- Rate-limit aware retry path for `429` and transient webhook failures
+- Bedrock skin face plus hat-overlay rendering to PNG
+- Local avatar cache under the plugin data folder
+- Configurable public avatar base URL for Discord `avatar_url`
 
 ## Build on Linux
 
@@ -27,26 +29,12 @@ cmake --preset linux-clang-local-libcxx
 cmake --build --preset build-local
 ```
 
-Equivalent explicit commands:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-```
-
-If you want to force Clang explicitly:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
-cmake --build build -j
-```
-
 Note: Endstone requires Clang on Linux and forces `-stdlib=libc++`, so plain `g++` builds are expected to fail.
 
 Expected Linux artifact name:
 
 ```text
-build/endstone_bedrock_discord_bridge.so
+build-local/endstone_bedrock_discord_bridge.so
 ```
 
 ## Config
@@ -60,8 +48,34 @@ cp config/discord.env.example path/to/bedrock_server/plugins/bedrock_discord_bri
 Then set:
 
 ```text
+DISCORD_ENABLED=true
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+AVATAR_PUBLIC_BASE_URL=https://cdn.example.com/bedrock-avatars
 ```
+
+Config notes:
+
+- `DISCORD_WEBHOOK_URL` is required for Minecraft-to-Discord relay.
+- `AVATAR_PUBLIC_BASE_URL` is optional. If unset, chat still forwards, but Discord messages will not get per-player avatar icons.
+- Rendered head PNGs are written under `plugins/bedrock_discord_bridge/avatars/`.
+- `AVATAR_PUBLIC_BASE_URL` should point to an HTTP path that serves those cached PNG files.
+- `MAX_QUEUE_SIZE` controls local buffering when Discord is slow or rate-limiting.
+
+## Avatar hosting
+
+Discord webhook `avatar_url` must be a URL Discord can fetch. This plugin generates and caches PNGs locally, then maps them to:
+
+```text
+AVATAR_PUBLIC_BASE_URL/<skin-hash>.png
+```
+
+Practical production path:
+
+1. Point your web server at `plugins/bedrock_discord_bridge/avatars/`.
+2. Set `AVATAR_PUBLIC_BASE_URL` to the public URL for that directory.
+3. Let the plugin render and reuse cached head icons by skin hash.
+
+This keeps the plugin simple and fast while still matching the mature webhook-avatar pattern used by established Discord bridges.
 
 ## Recommended Discord architecture
 
@@ -74,20 +88,21 @@ Practical avatar path:
 
 1. Read Bedrock skin RGBA data from `player.getSkin().getImage()`.
 2. Extract the face region and hat/overlay region into a square head render.
-3. Upload the rendered PNG to a stable public URL.
-4. Cache the URL by `skin.getId()`.
-5. Reuse the cached `avatar_url` for subsequent webhook messages until the skin id changes.
+3. Write the PNG to the local avatar cache.
+4. Publish that cache directory behind a stable public URL.
+5. Reuse the resulting `avatar_url` for subsequent webhook messages until the skin hash changes.
 
 Rate-limit strategy:
 
 - Queue outbound webhook posts instead of sending inline on the chat event thread
 - Respect Discord `429` responses and `Retry-After`
 - Group local throttling by `X-RateLimit-Bucket`
-- Cache avatar URLs aggressively so skin uploads are much rarer than chat sends
+- Cache avatar URLs aggressively so avatar renders are much rarer than chat sends
+- Retry transient webhook failures with bounded backoff instead of blocking the server thread
 
-## Next implementation steps
+## Current scope
 
-- Add an async HTTP client for webhook POSTs
-- Add PNG encoding for extracted head icons
-- Add a storage target for avatar images
-- Add a Discord bot component for inbound relay and admin commands
+- Implemented: Minecraft-to-Discord relay via webhook
+- Implemented: local avatar rendering/cache pipeline for Bedrock skins
+- Implemented: Linux `.so` build path for Endstone
+- Not yet implemented: Discord bot component for Discord-to-Minecraft relay, slash commands, and admin workflows
