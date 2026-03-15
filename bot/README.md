@@ -43,8 +43,13 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 - `plugin_bridge.shared_secret` must match `bot_bridge.shared_secret` in the plugin config.
 - `discord.relay_channel_ids` can be left empty to allow all text channels in the configured guild.
 - `discord.sync_commands_globally` should usually stay `false` so command updates sync quickly to one guild.
-- `relay.include_attachment_urls` appends uploaded file URLs into the Minecraft relay message.
-- `relay.include_jump_url` appends the Discord jump link into the Minecraft relay message.
+- `relay.message_template` supports `{author}`, `{content}`, `{attachments}`, `{jump_url}`, `{channel}`, `{guild}`, and `{message_url}` so you can decide exactly what the plugin receives.
+- `relay.attachment_template` supports `{filename}`, `{url}`, and `{content_type}`.
+- `relay.include_attachment_urls` and `relay.include_jump_url` decide whether those placeholders get populated.
+- `relay.ignore_bot_messages` and `relay.ignore_webhook_messages` are useful if you run multiple Discord automations in the same relay channel.
+- `presence.activity_text` supports `{server_name}`, `{minecraft_version}`, `{online_players}`, `{webhook_queue_depth}`, and `{guild_name}`.
+- `presence.activity_type` supports `playing`, `streaming`, `listening`, `watching`, `competing`, and `custom`.
+- `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` tune runtime verbosity.
 - `slash_commands.ephemeral_responses` controls whether command replies stay visible only to the caller.
 
 ## Slash commands

@@ -12,8 +12,9 @@ Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecra
 - Local avatar cache under the plugin data folder
 - Built-in HTTP server for serving avatar PNGs
 - Secure local bot bridge API for Discord-to-Minecraft relay and remote command execution
-- JSON config with nested sections for Discord, queue, avatar hosting, and bot bridge settings
+- JSON config with nested sections for Discord, relay toggles, logging, queue, avatar hosting, and bot bridge settings
 - Companion Discord bot with its own JSON config and slash commands
+- Customizable bot presence plus configurable Discord-to-Minecraft message formatting
 - `/discordbridge status` and `/discordbridge reload`
 
 ## Build on Linux
@@ -77,18 +78,22 @@ Admin commands:
 Config notes:
 
 - `discord.webhook_url` is required for Minecraft-to-Discord relay.
-- `discord.username_template` and `discord.content_template` support `{player}`, `{message}`, `{skin_id}`, and `{server}`.
+- `discord.username_template`, `discord.content_template`, `discord.system_username_template`, and the join/quit/death templates support `{player}`, `{message}`, `{event_message}`, `{event}`, `{skin_id}`, and `{server}`.
+- `relay.minecraft_to_discord_enabled` is the master outbound switch, and `relay.chat_enabled`, `relay.join_enabled`, `relay.quit_enabled`, and `relay.death_enabled` let you tune which Minecraft events reach Discord.
+- `discord.use_player_avatar_for_system_messages` controls whether join/quit/death webhook posts reuse the player head avatar.
 - `avatar.enabled` controls skin-head rendering.
 - `avatar.public_base_url` is a direct override if you already host the avatar cache elsewhere.
 - `avatar.http_server` can serve the avatar cache directly from the plugin.
 - If `avatar.http_server.public_base_url` is set, the plugin uses it to build Discord `avatar_url` values.
 - If `avatar.public_base_url` and `avatar.http_server.public_base_url` are both empty, the plugin derives a local base URL only when `bind_host` is not a wildcard address.
 - `queue.max_size`, `queue.max_attempts`, and timeout values control webhook behavior under load.
+- `logging.log_filtered_events`, `logging.log_webhook_successes`, `logging.log_http_requests`, and the avatar/bot logging flags let you dial the plugin between quiet production mode and detailed troubleshooting.
 - `bot_bridge.enabled` turns on the local HTTP API used by the companion Discord bot.
 - `bot_bridge.shared_secret` must match the bot config exactly.
 - `bot_bridge.api_route_prefix` must line up with the bot's `plugin_bridge.base_url`.
 - `bot_bridge.allow_local_requests_only` should stay `true` unless you intentionally expose the API behind another trusted hop.
-- `bot_bridge.inbound_chat_template` supports `{author}`, `{content}`, `{channel}`, and `{guild}`.
+- `bot_bridge.inbound_chat_template` supports `{author}`, `{content}`, `{channel}`, `{guild}`, `{message_url}`, and `{server}`.
+- `bot_bridge.inbound_chat_max_length` clamps how much Discord content the plugin will project into Minecraft chat.
 
 ## Avatar hosting
 
@@ -150,7 +155,10 @@ Bot config highlights:
 - `discord.relay_channel_ids` limits which Discord channels relay into Minecraft.
 - `discord.command_role_ids` and `discord.status_role_ids` control who can use slash commands.
 - `plugin_bridge.base_url` should match `http://127.0.0.1:<port><api_route_prefix>`.
-- `relay.include_attachment_urls`, `relay.include_jump_url`, and `relay.max_message_length` tune how Discord messages are projected into chat.
+- `relay.message_template`, `relay.attachment_template`, `relay.jump_url_template`, and `relay.join_separator` control how Discord messages are projected into Minecraft before the plugin wraps them with `bot_bridge.inbound_chat_template`.
+- `relay.ignore_bot_messages` and `relay.ignore_webhook_messages` let you decide whether other automation can talk back into Minecraft.
+- `presence.activity_text` supports `{server_name}`, `{minecraft_version}`, `{online_players}`, `{webhook_queue_depth}`, and `{guild_name}`.
+- `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` control bot verbosity.
 - Slash commands provided today: `/mcstatus`, `/mccommand`, `/mcreloadbridge`.
 
 ## Deployment order
@@ -165,8 +173,10 @@ Bot config highlights:
 ## Implemented scope
 
 - Implemented: Minecraft-to-Discord relay via webhook with per-message username and avatar URL support
+- Implemented: Configurable relay templates and event toggles for chat, join, quit, and death messages
 - Implemented: Bedrock skin head rendering, caching, and built-in avatar HTTP serving
 - Implemented: Discord-to-Minecraft relay through the companion bot and secure plugin API
+- Implemented: Customizable companion-bot presence and relay/logging controls
 - Implemented: Slash-command driven status, reload, and remote command execution
 - Implemented: Linux `.so` build path for Endstone and JSON-driven runtime configuration
 
