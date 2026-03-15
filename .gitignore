@@ -1,2 +1,5 @@
 build/
 build-clang/
+build-local/
+.deps/
+a.out

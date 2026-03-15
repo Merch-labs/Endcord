@@ -14,6 +14,21 @@ Linux-ready Endstone C++ plugin skeleton for Minecraft Bedrock chat forwarding t
 
 The current CMake project is pinned to Endstone `v0.11.2`.
 
+On Ubuntu hosts where you do not have sudo, bootstrap the required `libc++` toolchain locally first:
+
+```bash
+./scripts/setup-local-libcxx.sh
+```
+
+Then configure and build with the checked-in preset:
+
+```bash
+cmake --preset linux-clang-local-libcxx
+cmake --build --preset build-local
+```
+
+Equivalent explicit commands:
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
@@ -25,6 +40,8 @@ If you want to force Clang explicitly:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
 cmake --build build -j
 ```
+
+Note: Endstone requires Clang on Linux and forces `-stdlib=libc++`, so plain `g++` builds are expected to fail.
 
 Expected Linux artifact name:
 

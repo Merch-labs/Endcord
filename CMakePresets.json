@@ -1,0 +1,29 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "linux-clang-local-libcxx",
+      "displayName": "Linux Clang + local libc++",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-local",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS": "-isystem ${sourceDir}/.deps/ubuntu-libcxx/root/usr/include/c++/v1",
+        "CMAKE_EXE_LINKER_FLAGS": "-L${sourceDir}/.deps/ubuntu-libcxx/root/usr/lib/llvm-18/lib -Wl,-rpath,${sourceDir}/.deps/ubuntu-libcxx/root/usr/lib/llvm-18/lib",
+        "CMAKE_SHARED_LINKER_FLAGS": "-L${sourceDir}/.deps/ubuntu-libcxx/root/usr/lib/llvm-18/lib -Wl,-rpath,${sourceDir}/.deps/ubuntu-libcxx/root/usr/lib/llvm-18/lib"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-local",
+      "configurePreset": "linux-clang-local-libcxx"
+    }
+  ]
+}
