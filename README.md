@@ -157,3 +157,9 @@ Bot config highlights:
 - Implemented: Discord-to-Minecraft relay through the companion bot and secure plugin API
 - Implemented: Slash-command driven status, reload, and remote command execution
 - Implemented: Linux `.so` build path for Endstone and JSON-driven runtime configuration
+
+## Publishing notes
+
+- License: [LICENSE](LICENSE)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Third-party dependency summary: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
