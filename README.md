@@ -33,6 +33,18 @@ cmake --preset linux-clang-local-libcxx
 cmake --build --preset build-local
 ```
 
+To build a plugin binary that matches the official `endstone/endstone` Debian 12 Docker image and its `glibc 2.36`, use:
+
+```bash
+./scripts/build-plugin-debian12.sh
+```
+
+That produces:
+
+```text
+build-debian12/endstone_bedrock_discord_bridge.so
+```
+
 Note: Endstone requires Clang on Linux and forces `-stdlib=libc++`, so plain `g++` builds are expected to fail.
 
 Expected Linux artifact name:

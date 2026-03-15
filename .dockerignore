@@ -1,0 +1,10 @@
+.git
+build
+build-clang
+build-local
+build-debian12
+.deps
+bot/.venv
+bot/config.json
+__pycache__
+*.pyc
