@@ -26,7 +26,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 ENDSTONE_PLUGIN(/*name=*/"bedrock_discord_bridge",
-                /*version=*/"0.3.0",
+                /*version=*/"0.4.0",
                 /*main_class=*/BedrockDiscordBridgePlugin)
 {
     prefix = "BedrockDiscordBridge";
@@ -70,6 +70,9 @@ void BedrockDiscordBridgePlugin::onEnable()
     writeDefaultConfigIfMissing();
     loadConfig();
     registerEvent(&BedrockDiscordBridgePlugin::onPlayerChat, *this);
+    registerEvent(&BedrockDiscordBridgePlugin::onPlayerJoin, *this);
+    registerEvent(&BedrockDiscordBridgePlugin::onPlayerQuit, *this);
+    registerEvent(&BedrockDiscordBridgePlugin::onPlayerDeath, *this);
     restartRuntime();
 
     getLogger().info("Plugin enabled. Chat forwarding pipeline is active.");
@@ -129,6 +132,48 @@ void BedrockDiscordBridgePlugin::onPlayerChat(endstone::PlayerChatEvent &event)
     forwardChatToDiscord(event.getPlayer(), event.getMessage());
 }
 
+void BedrockDiscordBridgePlugin::onPlayerJoin(endstone::PlayerJoinEvent &event)
+{
+    if (!config_.relay.join_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping join relay for '{}' because relay.join_enabled is false.",
+                              event.getPlayer().getName());
+        }
+        return;
+    }
+
+    const auto join_message = event.getJoinMessage().has_value() ? messageToPlainText(*event.getJoinMessage()) : "";
+    forwardLifecycleEventToDiscord(event.getPlayer(), "join", config_.discord.join_content_template, join_message);
+}
+
+void BedrockDiscordBridgePlugin::onPlayerQuit(endstone::PlayerQuitEvent &event)
+{
+    if (!config_.relay.quit_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping quit relay for '{}' because relay.quit_enabled is false.",
+                              event.getPlayer().getName());
+        }
+        return;
+    }
+
+    const auto quit_message = event.getQuitMessage().has_value() ? messageToPlainText(*event.getQuitMessage()) : "";
+    forwardLifecycleEventToDiscord(event.getPlayer(), "quit", config_.discord.quit_content_template, quit_message);
+}
+
+void BedrockDiscordBridgePlugin::onPlayerDeath(endstone::PlayerDeathEvent &event)
+{
+    if (!config_.relay.death_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping death relay for '{}' because relay.death_enabled is false.",
+                              event.getPlayer().getName());
+        }
+        return;
+    }
+
+    const auto death_message = event.getDeathMessage().has_value() ? messageToPlainText(*event.getDeathMessage()) : "";
+    forwardLifecycleEventToDiscord(event.getPlayer(), "death", config_.discord.death_content_template, death_message);
+}
+
 void BedrockDiscordBridgePlugin::ensureDataFolder() const
 {
     std::error_code ec;
@@ -146,15 +191,26 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
     }
 
     json root = {
-        {"config_version", 1},
+        {"config_version", 2},
         {"enabled", true},
         {"discord",
          {{"webhook_url", ""},
           {"username_template", "{player}"},
           {"content_template", "{message}"},
+          {"system_username_template", "{server}"},
+          {"join_content_template", ":inbox_tray: **{player}** joined the server."},
+          {"quit_content_template", ":outbox_tray: **{player}** left the server."},
+          {"death_content_template", ":skull: {event_message}"},
           {"allow_mentions", false},
+          {"use_player_avatar_for_system_messages", true},
           {"max_username_length", 80},
           {"max_content_length", 2000}}},
+        {"relay",
+         {{"minecraft_to_discord_enabled", true},
+          {"chat_enabled", true},
+          {"join_enabled", true},
+          {"quit_enabled", true},
+          {"death_enabled", true}}},
         {"queue",
          {{"max_size", 256},
           {"max_attempts", 5},
@@ -183,7 +239,16 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
           {"inbound_chat_enabled", true},
           {"command_enabled", true},
           {"inbound_chat_template", "[Discord] #{channel} <{author}> {content}"},
-          {"request_timeout_ms", 5000}}}
+          {"inbound_chat_max_length", 2000},
+          {"request_timeout_ms", 5000}}},
+        {"logging",
+         {{"log_filtered_events", false},
+          {"log_webhook_successes", false},
+          {"log_http_requests", false},
+          {"log_avatar_cache_hits", false},
+          {"log_avatar_cache_misses", false},
+          {"log_inbound_chat", false},
+          {"log_remote_commands", true}}}
     };
 
     std::ofstream output(config_path);
@@ -224,14 +289,50 @@ void BedrockDiscordBridgePlugin::loadConfig()
             if (discord.contains("content_template") && discord["content_template"].is_string()) {
                 config_.discord.content_template = discord["content_template"].get<std::string>();
             }
+            if (discord.contains("system_username_template") && discord["system_username_template"].is_string()) {
+                config_.discord.system_username_template = discord["system_username_template"].get<std::string>();
+            }
+            if (discord.contains("join_content_template") && discord["join_content_template"].is_string()) {
+                config_.discord.join_content_template = discord["join_content_template"].get<std::string>();
+            }
+            if (discord.contains("quit_content_template") && discord["quit_content_template"].is_string()) {
+                config_.discord.quit_content_template = discord["quit_content_template"].get<std::string>();
+            }
+            if (discord.contains("death_content_template") && discord["death_content_template"].is_string()) {
+                config_.discord.death_content_template = discord["death_content_template"].get<std::string>();
+            }
             if (discord.contains("allow_mentions") && discord["allow_mentions"].is_boolean()) {
                 config_.discord.allow_mentions = discord["allow_mentions"].get<bool>();
+            }
+            if (discord.contains("use_player_avatar_for_system_messages") &&
+                discord["use_player_avatar_for_system_messages"].is_boolean()) {
+                config_.discord.use_player_avatar_for_system_messages =
+                    discord["use_player_avatar_for_system_messages"].get<bool>();
             }
             if (discord.contains("max_username_length") && discord["max_username_length"].is_number_integer()) {
                 config_.discord.max_username_length = discord["max_username_length"].get<int>();
             }
             if (discord.contains("max_content_length") && discord["max_content_length"].is_number_integer()) {
                 config_.discord.max_content_length = discord["max_content_length"].get<int>();
+            }
+        }
+
+        if (root.contains("relay") && root["relay"].is_object()) {
+            const auto &relay = root["relay"];
+            if (relay.contains("minecraft_to_discord_enabled") && relay["minecraft_to_discord_enabled"].is_boolean()) {
+                config_.relay.minecraft_to_discord_enabled = relay["minecraft_to_discord_enabled"].get<bool>();
+            }
+            if (relay.contains("chat_enabled") && relay["chat_enabled"].is_boolean()) {
+                config_.relay.chat_enabled = relay["chat_enabled"].get<bool>();
+            }
+            if (relay.contains("join_enabled") && relay["join_enabled"].is_boolean()) {
+                config_.relay.join_enabled = relay["join_enabled"].get<bool>();
+            }
+            if (relay.contains("quit_enabled") && relay["quit_enabled"].is_boolean()) {
+                config_.relay.quit_enabled = relay["quit_enabled"].get<bool>();
+            }
+            if (relay.contains("death_enabled") && relay["death_enabled"].is_boolean()) {
+                config_.relay.death_enabled = relay["death_enabled"].get<bool>();
             }
         }
 
@@ -321,8 +422,37 @@ void BedrockDiscordBridgePlugin::loadConfig()
             if (bot_bridge.contains("inbound_chat_template") && bot_bridge["inbound_chat_template"].is_string()) {
                 config_.bot_bridge.inbound_chat_template = bot_bridge["inbound_chat_template"].get<std::string>();
             }
+            if (bot_bridge.contains("inbound_chat_max_length") &&
+                bot_bridge["inbound_chat_max_length"].is_number_integer()) {
+                config_.bot_bridge.inbound_chat_max_length = bot_bridge["inbound_chat_max_length"].get<int>();
+            }
             if (bot_bridge.contains("request_timeout_ms") && bot_bridge["request_timeout_ms"].is_number_integer()) {
                 config_.bot_bridge.request_timeout_ms = bot_bridge["request_timeout_ms"].get<int>();
+            }
+        }
+
+        if (root.contains("logging") && root["logging"].is_object()) {
+            const auto &logging = root["logging"];
+            if (logging.contains("log_filtered_events") && logging["log_filtered_events"].is_boolean()) {
+                config_.logging.log_filtered_events = logging["log_filtered_events"].get<bool>();
+            }
+            if (logging.contains("log_webhook_successes") && logging["log_webhook_successes"].is_boolean()) {
+                config_.logging.log_webhook_successes = logging["log_webhook_successes"].get<bool>();
+            }
+            if (logging.contains("log_http_requests") && logging["log_http_requests"].is_boolean()) {
+                config_.logging.log_http_requests = logging["log_http_requests"].get<bool>();
+            }
+            if (logging.contains("log_avatar_cache_hits") && logging["log_avatar_cache_hits"].is_boolean()) {
+                config_.logging.log_avatar_cache_hits = logging["log_avatar_cache_hits"].get<bool>();
+            }
+            if (logging.contains("log_avatar_cache_misses") && logging["log_avatar_cache_misses"].is_boolean()) {
+                config_.logging.log_avatar_cache_misses = logging["log_avatar_cache_misses"].get<bool>();
+            }
+            if (logging.contains("log_inbound_chat") && logging["log_inbound_chat"].is_boolean()) {
+                config_.logging.log_inbound_chat = logging["log_inbound_chat"].get<bool>();
+            }
+            if (logging.contains("log_remote_commands") && logging["log_remote_commands"].is_boolean()) {
+                config_.logging.log_remote_commands = logging["log_remote_commands"].get<bool>();
             }
         }
     }
@@ -349,6 +479,7 @@ void BedrockDiscordBridgePlugin::loadConfig()
         normalizeRoutePrefix(config_.bot_bridge.api_route_prefix.empty() ? "/bedrock-discord-bridge/api"
                                                                          : config_.bot_bridge.api_route_prefix);
     config_.bot_bridge.shared_secret = normalizeSecret(config_.bot_bridge.shared_secret);
+    config_.bot_bridge.inbound_chat_max_length = std::clamp(config_.bot_bridge.inbound_chat_max_length, 1, 4000);
     config_.bot_bridge.request_timeout_ms = std::max(config_.bot_bridge.request_timeout_ms, 250);
 
     if (!config_.avatar.public_base_url.empty() && config_.avatar.public_base_url.ends_with('/')) {
@@ -408,6 +539,13 @@ void BedrockDiscordBridgePlugin::startWorker()
         return;
     }
 
+    if (!config_.relay.minecraft_to_discord_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Webhook worker not started because relay.minecraft_to_discord_enabled is false.");
+        }
+        return;
+    }
+
     if (!webhook_target_) {
         getLogger().warning("Webhook worker not started because the Discord webhook URL is missing or invalid.");
         return;
@@ -464,7 +602,7 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
     installBotBridgeRoutes();
 
     avatar_server_->set_logger([this](const auto &req, const auto &res) {
-        if (res.status >= 400) {
+        if (config_.logging.log_http_requests || res.status >= 400) {
             getLogger().debug("Bridge HTTP {} {} -> {}", req.method, req.path, res.status);
         }
     });
@@ -533,22 +671,91 @@ void BedrockDiscordBridgePlugin::workerLoop()
 
 void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &player, const std::string &message)
 {
-    if (!config_.enabled) {
+    if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping chat relay for '{}' because Minecraft-to-Discord relay is disabled.",
+                              player.getName());
+        }
+        return;
+    }
+
+    if (!config_.relay.chat_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping chat relay for '{}' because relay.chat_enabled is false.", player.getName());
+        }
         return;
     }
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
     const auto skin = player.getSkin();
-    auto username = applyTemplate(config_.discord.username_template, player.getName(), message, skin.getId(),
-                                  getServer().getName());
-    auto content = applyTemplate(config_.discord.content_template, player.getName(), message, skin.getId(),
-                                 getServer().getName());
+    auto username = applyTemplate(config_.discord.username_template,
+                                  {{"{player}", player.getName()},
+                                   {"{message}", message},
+                                   {"{event_message}", message},
+                                   {"{event}", "chat"},
+                                   {"{skin_id}", skin.getId()},
+                                   {"{server}", getServer().getName()}});
+    auto content = applyTemplate(config_.discord.content_template,
+                                 {{"{player}", player.getName()},
+                                  {"{message}", message},
+                                  {"{event_message}", message},
+                                  {"{event}", "chat"},
+                                  {"{skin_id}", skin.getId()},
+                                  {"{server}", getServer().getName()}});
 
+    enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
+}
+
+void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::Player &player,
+                                                                const std::string &event_name,
+                                                                const std::string &content_template,
+                                                                const std::string &event_message)
+{
+    if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled) {
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping {} relay for '{}' because Minecraft-to-Discord relay is disabled.", event_name,
+                              player.getName());
+        }
+        return;
+    }
+
+    const auto skin = player.getSkin();
+    auto username = applyTemplate(config_.discord.system_username_template,
+                                  {{"{player}", player.getName()},
+                                   {"{message}", event_message},
+                                   {"{event_message}", event_message},
+                                   {"{event}", event_name},
+                                   {"{skin_id}", skin.getId()},
+                                   {"{server}", getServer().getName()}});
+    auto content = applyTemplate(content_template,
+                                 {{"{player}", player.getName()},
+                                  {"{message}", event_message},
+                                  {"{event_message}", event_message},
+                                  {"{event}", event_name},
+                                  {"{skin_id}", skin.getId()},
+                                  {"{server}", getServer().getName()}});
+
+    std::optional<std::string> avatar_url = std::nullopt;
+    if (config_.discord.use_player_avatar_for_system_messages) {
+        avatar_url = getOrCreateAvatarUrl(player);
+    }
+
+    enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
+}
+
+void BedrockDiscordBridgePlugin::enqueueDiscordMessage(const std::string &source_name, std::string username,
+                                                       std::string content,
+                                                       const std::optional<std::string> &avatar_url)
+{
     if (username.empty()) {
-        username = player.getName();
+        username = source_name;
     }
     if (content.empty()) {
-        content = message;
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping Discord webhook POST for '{}' because the formatted content is empty.",
+                              source_name);
+        }
+        return;
     }
 
     if (static_cast<int>(username.size()) > config_.discord.max_username_length) {
@@ -572,11 +779,14 @@ void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &pl
     payload << "}";
 
     if (!webhook_target_) {
-        getLogger().debug("Skipping Discord webhook POST because the Discord webhook URL is not configured.");
+        if (config_.logging.log_filtered_events) {
+            getLogger().debug("Skipping Discord webhook POST for '{}' because the Discord webhook URL is not configured.",
+                              source_name);
+        }
         return;
     }
 
-    enqueueWebhookPayload({player.getName(), payload.str(), 0});
+    enqueueWebhookPayload({source_name, payload.str(), 0});
 }
 
 void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) const
@@ -588,6 +798,11 @@ void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) con
     }
 
     sender.sendMessage("Bridge enabled: {}", config_.enabled ? "yes" : "no");
+    sender.sendMessage("Minecraft -> Discord relay enabled: {}", config_.relay.minecraft_to_discord_enabled ? "yes" : "no");
+    sender.sendMessage("Chat relay enabled: {}", config_.relay.chat_enabled ? "yes" : "no");
+    sender.sendMessage("Join relay enabled: {}", config_.relay.join_enabled ? "yes" : "no");
+    sender.sendMessage("Quit relay enabled: {}", config_.relay.quit_enabled ? "yes" : "no");
+    sender.sendMessage("Death relay enabled: {}", config_.relay.death_enabled ? "yes" : "no");
     sender.sendMessage("Webhook configured: {}", webhook_target_.has_value() ? "yes" : "no");
     sender.sendMessage("Webhook queue depth: {}", queue_depth);
     sender.sendMessage("Avatar rendering enabled: {}", config_.avatar.enabled ? "yes" : "no");
@@ -645,6 +860,9 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
     }
 
     if (result->status == 200 || result->status == 204) {
+        if (config_.logging.log_webhook_successes) {
+            getLogger().info("Discord webhook POST succeeded for '{}' with status {}.", job.player_name, result->status);
+        }
         if (result->has_header("X-RateLimit-Remaining") && result->get_header_value("X-RateLimit-Remaining") == "0") {
             if (const auto reset_after = parseRetryDelayMs(result->get_header_value("X-RateLimit-Reset-After"))) {
                 std::lock_guard lock(queue_mutex_);
@@ -731,13 +949,23 @@ void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req
         return;
     }
 
-    content = truncateUtf8Bytes(content, 2000);
+    content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
     const auto formatted = replaceAll(
-        replaceAll(replaceAll(replaceAll(config_.bot_bridge.inbound_chat_template, "{author}", author), "{content}", content),
-                   "{channel}", channel),
-        "{guild}", guild);
+        replaceAll(
+            replaceAll(
+                replaceAll(
+                    replaceAll(
+                        replaceAll(config_.bot_bridge.inbound_chat_template, "{author}", author), "{content}", content),
+                    "{channel}", channel),
+                "{guild}", guild),
+            "{message_url}", message_url),
+        "{server}", getServer().getName());
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
+
+    if (config_.logging.log_inbound_chat) {
+        getLogger().info("Relaying Discord message from '{}' in '#{}' into Minecraft.", author, channel);
+    }
 
     getServer().getScheduler().runTask(*this, [this, promise, formatted] {
         getServer().broadcastMessage(formatted);
@@ -806,7 +1034,9 @@ void BedrockDiscordBridgePlugin::handleBotBridgeCommand(const httplib::Request &
             [&result](const endstone::Message &message) { result.output.push_back(messageToPlainText(message)); },
             [&result](const endstone::Message &message) { result.errors.push_back(messageToPlainText(message)); });
 
-        getLogger().info("Executing remote Discord command from '{}': {}", actor, command_line);
+        if (config_.logging.log_remote_commands) {
+            getLogger().info("Executing remote Discord command from '{}': {}", actor, command_line);
+        }
         result.dispatched = getServer().dispatchCommand(wrapper, command_line);
         result.ok = result.dispatched;
         promise->set_value(std::move(result));
@@ -847,6 +1077,8 @@ void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &r
                           {"online_players", getServer().getOnlinePlayers().size()},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"webhook_queue_depth", queue_depth},
+                          {"minecraft_to_discord_enabled", config_.relay.minecraft_to_discord_enabled},
+                          {"discord_to_minecraft_enabled", config_.bot_bridge.inbound_chat_enabled},
                           {"avatar_enabled", config_.avatar.enabled},
                           {"avatar_base_url", getEffectiveAvatarBaseUrl().value_or("")},
                           {"bot_bridge_enabled", config_.bot_bridge.enabled}})
@@ -902,6 +1134,9 @@ std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(cons
     const auto skin_key = computeSkinCacheKey(skin, config_.avatar.size);
 
     if (const auto it = avatar_cache_.find(skin_key); it != avatar_cache_.end()) {
+        if (config_.logging.log_avatar_cache_hits) {
+            getLogger().debug("Avatar cache hit for '{}' (skin {}).", player.getName(), skin.getId());
+        }
         return it->second.public_url;
     }
 
@@ -920,6 +1155,10 @@ BedrockDiscordBridgePlugin::renderAvatarIfNeeded(const endstone::Player &player)
     const auto skin_key = computeSkinCacheKey(skin, config_.avatar.size);
     const auto avatar_file_name = skin_key + ".png";
     const auto avatar_path = getAvatarCacheDir() / avatar_file_name;
+
+    if (config_.logging.log_avatar_cache_misses) {
+        getLogger().debug("Avatar cache miss for '{}' (skin {}).", player.getName(), skin.getId());
+    }
 
     if (!fs::exists(avatar_path) && !writeHeadPng(skin, avatar_path)) {
         return std::nullopt;
@@ -1093,14 +1332,12 @@ std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin
     return stream.str();
 }
 
-std::string BedrockDiscordBridgePlugin::applyTemplate(std::string value, const std::string &player_name,
-                                                      const std::string &message, const std::string &skin_id,
-                                                      const std::string &server_name)
+std::string BedrockDiscordBridgePlugin::applyTemplate(
+    std::string value, const std::vector<std::pair<std::string, std::string>> &replacements)
 {
-    value = replaceAll(std::move(value), "{player}", player_name);
-    value = replaceAll(std::move(value), "{message}", message);
-    value = replaceAll(std::move(value), "{skin_id}", skin_id);
-    value = replaceAll(std::move(value), "{server}", server_name);
+    for (const auto &[needle, replacement] : replacements) {
+        value = replaceAll(std::move(value), needle, replacement);
+    }
     return value;
 }
 

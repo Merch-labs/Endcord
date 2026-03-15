@@ -33,15 +33,31 @@ public:
                    const std::vector<std::string> &args) override;
 
     void onPlayerChat(endstone::PlayerChatEvent &event);
+    void onPlayerJoin(endstone::PlayerJoinEvent &event);
+    void onPlayerQuit(endstone::PlayerQuitEvent &event);
+    void onPlayerDeath(endstone::PlayerDeathEvent &event);
 
 private:
     struct DiscordOptions {
         std::string webhook_url;
         std::string username_template = "{player}";
         std::string content_template = "{message}";
+        std::string system_username_template = "{server}";
+        std::string join_content_template = ":inbox_tray: **{player}** joined the server.";
+        std::string quit_content_template = ":outbox_tray: **{player}** left the server.";
+        std::string death_content_template = ":skull: {event_message}";
         bool allow_mentions = false;
+        bool use_player_avatar_for_system_messages = true;
         int max_username_length = 80;
         int max_content_length = 2000;
+    };
+
+    struct RelayOptions {
+        bool minecraft_to_discord_enabled = true;
+        bool chat_enabled = true;
+        bool join_enabled = true;
+        bool quit_enabled = true;
+        bool death_enabled = true;
     };
 
     struct QueueOptions {
@@ -79,16 +95,29 @@ private:
         bool inbound_chat_enabled = true;
         bool command_enabled = true;
         std::string inbound_chat_template = "[Discord] #{channel} <{author}> {content}";
+        int inbound_chat_max_length = 2000;
         int request_timeout_ms = 5000;
     };
 
+    struct LoggingOptions {
+        bool log_filtered_events = false;
+        bool log_webhook_successes = false;
+        bool log_http_requests = false;
+        bool log_avatar_cache_hits = false;
+        bool log_avatar_cache_misses = false;
+        bool log_inbound_chat = false;
+        bool log_remote_commands = true;
+    };
+
     struct BridgeConfig {
-        int config_version = 1;
+        int config_version = 2;
         bool enabled = true;
         DiscordOptions discord{};
+        RelayOptions relay{};
         QueueOptions queue{};
         AvatarOptions avatar{};
         BotBridgeOptions bot_bridge{};
+        LoggingOptions logging{};
     };
 
     struct WebhookTarget {
@@ -119,6 +148,10 @@ private:
     void workerLoop();
     void sendStatus(endstone::CommandSender &sender) const;
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
+    void forwardLifecycleEventToDiscord(const endstone::Player &player, const std::string &event_name,
+                                        const std::string &content_template, const std::string &event_message);
+    void enqueueDiscordMessage(const std::string &source_name, std::string username, std::string content,
+                               const std::optional<std::string> &avatar_url);
     void enqueueWebhookPayload(WebhookJob job);
     void processWebhookJob(WebhookJob job);
     void installBotBridgeRoutes();
@@ -137,8 +170,8 @@ private:
     static std::optional<WebhookTarget> parseWebhookUrl(const std::string &url);
     static std::optional<std::int64_t> parseRetryDelayMs(const std::string &value);
     static std::optional<std::int64_t> parseRetryDelayMsFromBody(const std::string &body);
-    static std::string applyTemplate(std::string value, const std::string &player_name, const std::string &message,
-                                     const std::string &skin_id, const std::string &server_name);
+    static std::string applyTemplate(std::string value,
+                                     const std::vector<std::pair<std::string, std::string>> &replacements);
     static std::string replaceAll(std::string value, const std::string &needle, const std::string &replacement);
     static std::string normalizeRoutePrefix(const std::string &value);
     static std::string normalizeSecret(std::string value);

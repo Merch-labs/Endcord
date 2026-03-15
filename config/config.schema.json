@@ -8,9 +8,11 @@
     "config_version",
     "enabled",
     "discord",
+    "relay",
     "queue",
     "avatar",
-    "bot_bridge"
+    "bot_bridge",
+    "logging"
   ],
   "properties": {
     "config_version": {
@@ -27,7 +29,12 @@
         "webhook_url",
         "username_template",
         "content_template",
+        "system_username_template",
+        "join_content_template",
+        "quit_content_template",
+        "death_content_template",
         "allow_mentions",
+        "use_player_avatar_for_system_messages",
         "max_username_length",
         "max_content_length"
       ],
@@ -41,7 +48,22 @@
         "content_template": {
           "type": "string"
         },
+        "system_username_template": {
+          "type": "string"
+        },
+        "join_content_template": {
+          "type": "string"
+        },
+        "quit_content_template": {
+          "type": "string"
+        },
+        "death_content_template": {
+          "type": "string"
+        },
         "allow_mentions": {
+          "type": "boolean"
+        },
+        "use_player_avatar_for_system_messages": {
           "type": "boolean"
         },
         "max_username_length": {
@@ -53,6 +75,34 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 2000
+        }
+      }
+    },
+    "relay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minecraft_to_discord_enabled",
+        "chat_enabled",
+        "join_enabled",
+        "quit_enabled",
+        "death_enabled"
+      ],
+      "properties": {
+        "minecraft_to_discord_enabled": {
+          "type": "boolean"
+        },
+        "chat_enabled": {
+          "type": "boolean"
+        },
+        "join_enabled": {
+          "type": "boolean"
+        },
+        "quit_enabled": {
+          "type": "boolean"
+        },
+        "death_enabled": {
+          "type": "boolean"
         }
       }
     },
@@ -173,6 +223,7 @@
         "inbound_chat_enabled",
         "command_enabled",
         "inbound_chat_template",
+        "inbound_chat_max_length",
         "request_timeout_ms"
       ],
       "properties": {
@@ -197,9 +248,50 @@
         "inbound_chat_template": {
           "type": "string"
         },
+        "inbound_chat_max_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4000
+        },
         "request_timeout_ms": {
           "type": "integer",
           "minimum": 250
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log_filtered_events",
+        "log_webhook_successes",
+        "log_http_requests",
+        "log_avatar_cache_hits",
+        "log_avatar_cache_misses",
+        "log_inbound_chat",
+        "log_remote_commands"
+      ],
+      "properties": {
+        "log_filtered_events": {
+          "type": "boolean"
+        },
+        "log_webhook_successes": {
+          "type": "boolean"
+        },
+        "log_http_requests": {
+          "type": "boolean"
+        },
+        "log_avatar_cache_hits": {
+          "type": "boolean"
+        },
+        "log_avatar_cache_misses": {
+          "type": "boolean"
+        },
+        "log_inbound_chat": {
+          "type": "boolean"
+        },
+        "log_remote_commands": {
+          "type": "boolean"
         }
       }
     }

@@ -1,13 +1,25 @@
 {
-  "config_version": 1,
+  "config_version": 2,
   "enabled": true,
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/replace-me",
     "username_template": "{player}",
     "content_template": "{message}",
+    "system_username_template": "{server}",
+    "join_content_template": ":inbox_tray: **{player}** joined the server.",
+    "quit_content_template": ":outbox_tray: **{player}** left the server.",
+    "death_content_template": ":skull: {event_message}",
     "allow_mentions": false,
+    "use_player_avatar_for_system_messages": true,
     "max_username_length": 80,
     "max_content_length": 2000
+  },
+  "relay": {
+    "minecraft_to_discord_enabled": true,
+    "chat_enabled": true,
+    "join_enabled": true,
+    "quit_enabled": true,
+    "death_enabled": true
   },
   "queue": {
     "max_size": 256,
@@ -40,6 +52,16 @@
     "inbound_chat_enabled": true,
     "command_enabled": true,
     "inbound_chat_template": "[Discord] #{channel} <{author}> {content}",
+    "inbound_chat_max_length": 2000,
     "request_timeout_ms": 5000
+  },
+  "logging": {
+    "log_filtered_events": false,
+    "log_webhook_successes": false,
+    "log_http_requests": false,
+    "log_avatar_cache_hits": false,
+    "log_avatar_cache_misses": false,
+    "log_inbound_chat": false,
+    "log_remote_commands": true
   }
 }
