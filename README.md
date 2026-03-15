@@ -163,3 +163,13 @@ Bot config highlights:
 - License: [LICENSE](LICENSE)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Third-party dependency summary: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security guidance: [SECURITY.md](SECURITY.md)
+
+## Release checklist
+
+1. Confirm the plugin still builds with `cmake --build --preset build-local`.
+2. Confirm the bot still installs and its sources compile with `python3 -m compileall bot/src`.
+3. Review `config/config.json.example`, `config/config.schema.json`, `plugins/endcord/bot/config.json`, and `bot/config.schema.json` for any new settings.
+4. Update [CHANGELOG.md](CHANGELOG.md) with release notes.
+5. Tag the release only after CI passes on `master`.
