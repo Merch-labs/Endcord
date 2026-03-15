@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <future>
 #include <mutex>
 #include <memory>
 #include <optional>
@@ -16,6 +17,8 @@
 #include <vector>
 
 namespace httplib {
+struct Request;
+struct Response;
 class Server;
 }
 
@@ -68,12 +71,24 @@ private:
         AvatarHttpServerOptions http_server{};
     };
 
+    struct BotBridgeOptions {
+        bool enabled = true;
+        std::string shared_secret;
+        std::string api_route_prefix = "/bedrock-discord-bridge/api";
+        bool allow_local_requests_only = true;
+        bool inbound_chat_enabled = true;
+        bool command_enabled = true;
+        std::string inbound_chat_template = "[Discord] #{channel} <{author}> {content}";
+        int request_timeout_ms = 5000;
+    };
+
     struct BridgeConfig {
         int config_version = 1;
         bool enabled = true;
         DiscordOptions discord{};
         QueueOptions queue{};
         AvatarOptions avatar{};
+        BotBridgeOptions bot_bridge{};
     };
 
     struct WebhookTarget {
@@ -106,6 +121,11 @@ private:
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
     void enqueueWebhookPayload(WebhookJob job);
     void processWebhookJob(WebhookJob job);
+    void installBotBridgeRoutes();
+    void handleBotBridgeChat(const httplib::Request &req, httplib::Response &res);
+    void handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res);
+    void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
+    bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
 
     std::optional<std::string> getOrCreateAvatarUrl(const endstone::Player &player);
     std::optional<AvatarCacheEntry> renderAvatarIfNeeded(const endstone::Player &player);
@@ -121,8 +141,12 @@ private:
                                      const std::string &skin_id, const std::string &server_name);
     static std::string replaceAll(std::string value, const std::string &needle, const std::string &replacement);
     static std::string normalizeRoutePrefix(const std::string &value);
+    static std::string normalizeSecret(std::string value);
     static bool isWildcardHost(const std::string &host);
+    static bool isLoopbackAddress(const std::string &host);
     static std::string joinUrl(const std::string &base, const std::string &leaf);
+    static std::string messageToPlainText(const endstone::Message &message);
+    static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 
     std::filesystem::path getConfigPath() const;
     std::filesystem::path getAvatarCacheDir() const;

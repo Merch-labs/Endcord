@@ -3,10 +3,13 @@
 #include <httplib.h>
 #include <lodepng.h>
 #include <nlohmann/json.hpp>
+#include <endstone/command/command_sender_wrapper.h>
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -17,6 +20,7 @@
 #include <sstream>
 #include <system_error>
 #include <utility>
+#include <variant>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -170,7 +174,16 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
             {"route_prefix", "/bedrock-discord-bridge/avatars"},
             {"public_base_url", ""},
             {"cache_control", "public, max-age=86400"},
-            {"thread_count", 4}}}}}
+            {"thread_count", 4}}}}},
+        {"bot_bridge",
+         {{"enabled", true},
+          {"shared_secret", "change-me"},
+          {"api_route_prefix", "/bedrock-discord-bridge/api"},
+          {"allow_local_requests_only", true},
+          {"inbound_chat_enabled", true},
+          {"command_enabled", true},
+          {"inbound_chat_template", "[Discord] #{channel} <{author}> {content}"},
+          {"request_timeout_ms", 5000}}}
     };
 
     std::ofstream output(config_path);
@@ -284,6 +297,34 @@ void BedrockDiscordBridgePlugin::loadConfig()
                 }
             }
         }
+
+        if (root.contains("bot_bridge") && root["bot_bridge"].is_object()) {
+            const auto &bot_bridge = root["bot_bridge"];
+            if (bot_bridge.contains("enabled") && bot_bridge["enabled"].is_boolean()) {
+                config_.bot_bridge.enabled = bot_bridge["enabled"].get<bool>();
+            }
+            if (bot_bridge.contains("shared_secret") && bot_bridge["shared_secret"].is_string()) {
+                config_.bot_bridge.shared_secret = bot_bridge["shared_secret"].get<std::string>();
+            }
+            if (bot_bridge.contains("api_route_prefix") && bot_bridge["api_route_prefix"].is_string()) {
+                config_.bot_bridge.api_route_prefix = bot_bridge["api_route_prefix"].get<std::string>();
+            }
+            if (bot_bridge.contains("allow_local_requests_only") && bot_bridge["allow_local_requests_only"].is_boolean()) {
+                config_.bot_bridge.allow_local_requests_only = bot_bridge["allow_local_requests_only"].get<bool>();
+            }
+            if (bot_bridge.contains("inbound_chat_enabled") && bot_bridge["inbound_chat_enabled"].is_boolean()) {
+                config_.bot_bridge.inbound_chat_enabled = bot_bridge["inbound_chat_enabled"].get<bool>();
+            }
+            if (bot_bridge.contains("command_enabled") && bot_bridge["command_enabled"].is_boolean()) {
+                config_.bot_bridge.command_enabled = bot_bridge["command_enabled"].get<bool>();
+            }
+            if (bot_bridge.contains("inbound_chat_template") && bot_bridge["inbound_chat_template"].is_string()) {
+                config_.bot_bridge.inbound_chat_template = bot_bridge["inbound_chat_template"].get<std::string>();
+            }
+            if (bot_bridge.contains("request_timeout_ms") && bot_bridge["request_timeout_ms"].is_number_integer()) {
+                config_.bot_bridge.request_timeout_ms = bot_bridge["request_timeout_ms"].get<int>();
+            }
+        }
     }
     catch (const std::exception &e) {
         getLogger().error("Failed to parse config '{}': {}", config_path.string(), e.what());
@@ -301,7 +342,14 @@ void BedrockDiscordBridgePlugin::loadConfig()
     config_.avatar.size = std::clamp(config_.avatar.size, 8, 512);
     config_.avatar.http_server.port = std::clamp(config_.avatar.http_server.port, 1, 65535);
     config_.avatar.http_server.thread_count = std::clamp(config_.avatar.http_server.thread_count, 1, 64);
-    config_.avatar.http_server.route_prefix = normalizeRoutePrefix(config_.avatar.http_server.route_prefix);
+    config_.avatar.http_server.route_prefix =
+        normalizeRoutePrefix(config_.avatar.http_server.route_prefix.empty() ? "/bedrock-discord-bridge/avatars"
+                                                                             : config_.avatar.http_server.route_prefix);
+    config_.bot_bridge.api_route_prefix =
+        normalizeRoutePrefix(config_.bot_bridge.api_route_prefix.empty() ? "/bedrock-discord-bridge/api"
+                                                                         : config_.bot_bridge.api_route_prefix);
+    config_.bot_bridge.shared_secret = normalizeSecret(config_.bot_bridge.shared_secret);
+    config_.bot_bridge.request_timeout_ms = std::max(config_.bot_bridge.request_timeout_ms, 250);
 
     if (!config_.avatar.public_base_url.empty() && config_.avatar.public_base_url.ends_with('/')) {
         config_.avatar.public_base_url.pop_back();
@@ -315,6 +363,10 @@ void BedrockDiscordBridgePlugin::loadConfig()
         if (!webhook_target_) {
             getLogger().error("Configured Discord webhook URL is invalid.");
         }
+    }
+
+    if (config_.bot_bridge.enabled && config_.bot_bridge.shared_secret.empty()) {
+        getLogger().warning("Bot bridge is enabled but bot_bridge.shared_secret is empty. Bot API endpoints will reject requests.");
     }
 
     getLogger().info("Loaded config version {} from '{}'.", config_.config_version, config_path.string());
@@ -384,28 +436,36 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
 {
     stopAvatarServer();
 
-    if (!config_.enabled || !config_.avatar.enabled || !config_.avatar.http_server.enabled) {
+    const bool needs_http_server =
+        config_.enabled && ((config_.avatar.enabled && config_.avatar.http_server.enabled) || config_.bot_bridge.enabled);
+    if (!needs_http_server) {
         return;
     }
 
     avatar_server_ = std::make_unique<httplib::Server>();
-    avatar_server_->set_file_extension_and_mimetype_mapping("png", "image/png");
     avatar_server_->set_default_headers({{"Cache-Control", config_.avatar.http_server.cache_control}});
     avatar_server_->new_task_queue = [thread_count = static_cast<size_t>(config_.avatar.http_server.thread_count)] {
         return new httplib::ThreadPool(thread_count);
     };
 
-    const auto cache_dir = getAvatarCacheDir().string();
-    if (!avatar_server_->set_mount_point(config_.avatar.http_server.route_prefix, cache_dir)) {
-        getLogger().error("Failed to mount avatar cache directory '{}' at route '{}'.", cache_dir,
-                          config_.avatar.http_server.route_prefix);
-        avatar_server_.reset();
-        return;
+    if (config_.avatar.enabled && config_.avatar.http_server.enabled) {
+        avatar_server_->set_file_extension_and_mimetype_mapping("png", "image/png");
+
+        const auto cache_dir = getAvatarCacheDir().string();
+        if (!avatar_server_->set_mount_point(config_.avatar.http_server.route_prefix, cache_dir,
+                                             {{"Cache-Control", config_.avatar.http_server.cache_control}})) {
+            getLogger().error("Failed to mount avatar cache directory '{}' at route '{}'.", cache_dir,
+                              config_.avatar.http_server.route_prefix);
+            avatar_server_.reset();
+            return;
+        }
     }
+
+    installBotBridgeRoutes();
 
     avatar_server_->set_logger([this](const auto &req, const auto &res) {
         if (res.status >= 400) {
-            getLogger().debug("Avatar HTTP {} {} -> {}", req.method, req.path, res.status);
+            getLogger().debug("Bridge HTTP {} {} -> {}", req.method, req.path, res.status);
         }
     });
 
@@ -417,11 +477,11 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
         }
 
         if (!avatar_server_->listen(host.c_str(), port)) {
-            getLogger().error("Avatar HTTP server failed to listen on {}:{}.", host, port);
+            getLogger().error("Bridge HTTP server failed to listen on {}:{}.", host, port);
         }
     });
 
-    getLogger().info("Avatar HTTP server starting on {}:{}{}.", host, port, config_.avatar.http_server.route_prefix);
+    getLogger().info("Bridge HTTP server starting on {}:{}.", host, port);
 }
 
 void BedrockDiscordBridgePlugin::stopAvatarServer()
@@ -536,6 +596,8 @@ void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) con
     sender.sendMessage("Avatar HTTP server running: {}",
                        (avatar_server_ && avatar_server_->is_running()) ? "yes" : "no");
     sender.sendMessage("Avatar public base URL: {}", getEffectiveAvatarBaseUrl().value_or("<not configured>"));
+    sender.sendMessage("Bot bridge enabled: {}", config_.bot_bridge.enabled ? "yes" : "no");
+    sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
 }
 
 void BedrockDiscordBridgePlugin::enqueueWebhookPayload(WebhookJob job)
@@ -619,6 +681,215 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
     }
 
     getLogger().warning("Discord webhook rejected payload for '{}' with status {}.", job.player_name, result->status);
+}
+
+void BedrockDiscordBridgePlugin::installBotBridgeRoutes()
+{
+    if (!avatar_server_ || !config_.bot_bridge.enabled) {
+        return;
+    }
+
+    avatar_server_->Get(config_.bot_bridge.api_route_prefix + "/status",
+                        [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeStatus(req, res); });
+    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/chat",
+                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeChat(req, res); });
+    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/command",
+                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeCommand(req, res); });
+}
+
+void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Response &res)
+{
+    if (!isAuthorizedBotBridgeRequest(req, res)) {
+        return;
+    }
+    if (!config_.bot_bridge.inbound_chat_enabled) {
+        res.status = 403;
+        res.set_content(R"({"ok":false,"error":"inbound chat relay disabled"})", "application/json");
+        return;
+    }
+
+    json body;
+    try {
+        body = json::parse(req.body);
+    }
+    catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(json({{"ok", false}, {"error", std::string("invalid json: ") + e.what()}}).dump(),
+                        "application/json");
+        return;
+    }
+
+    const auto author = body.value("author", "");
+    auto content = body.value("content", "");
+    const auto channel = body.value("channel_name", "discord");
+    const auto guild = body.value("guild_name", "");
+    const auto message_url = body.value("message_url", "");
+
+    if (author.empty() || content.empty()) {
+        res.status = 400;
+        res.set_content(R"({"ok":false,"error":"author and content are required"})", "application/json");
+        return;
+    }
+
+    content = truncateUtf8Bytes(content, 2000);
+    const auto formatted = replaceAll(
+        replaceAll(replaceAll(replaceAll(config_.bot_bridge.inbound_chat_template, "{author}", author), "{content}", content),
+                   "{channel}", channel),
+        "{guild}", guild);
+    auto promise = std::make_shared<std::promise<void>>();
+    auto future = promise->get_future();
+
+    getServer().getScheduler().runTask(*this, [this, promise, formatted] {
+        getServer().broadcastMessage(formatted);
+        promise->set_value();
+    });
+
+    if (future.wait_for(std::chrono::milliseconds(config_.bot_bridge.request_timeout_ms)) != std::future_status::ready) {
+        res.status = 504;
+        res.set_content(R"({"ok":false,"error":"timed out waiting for main-thread chat relay"})", "application/json");
+        return;
+    }
+
+    res.status = 200;
+    res.set_content(json({{"ok", true}, {"message", "chat relayed"}, {"message_url", message_url}}).dump(),
+                    "application/json");
+}
+
+void BedrockDiscordBridgePlugin::handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res)
+{
+    if (!isAuthorizedBotBridgeRequest(req, res)) {
+        return;
+    }
+    if (!config_.bot_bridge.command_enabled) {
+        res.status = 403;
+        res.set_content(R"({"ok":false,"error":"remote command relay disabled"})", "application/json");
+        return;
+    }
+
+    json body;
+    try {
+        body = json::parse(req.body);
+    }
+    catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(json({{"ok", false}, {"error", std::string("invalid json: ") + e.what()}}).dump(),
+                        "application/json");
+        return;
+    }
+
+    const auto actor = body.value("actor_name", "discord");
+    auto command_line = body.value("command", "");
+    if (command_line.empty()) {
+        res.status = 400;
+        res.set_content(R"({"ok":false,"error":"command is required"})", "application/json");
+        return;
+    }
+    if (!command_line.empty() && command_line.front() == '/') {
+        command_line.erase(command_line.begin());
+    }
+
+    struct CommandResult {
+        bool ok = false;
+        bool dispatched = false;
+        std::vector<std::string> output;
+        std::vector<std::string> errors;
+    };
+
+    auto promise = std::make_shared<std::promise<CommandResult>>();
+    auto future = promise->get_future();
+
+    getServer().getScheduler().runTask(*this, [this, promise, actor, command_line] {
+        CommandResult result;
+        auto &console = getServer().getCommandSender();
+        endstone::CommandSenderWrapper wrapper(
+            console,
+            [&result](const endstone::Message &message) { result.output.push_back(messageToPlainText(message)); },
+            [&result](const endstone::Message &message) { result.errors.push_back(messageToPlainText(message)); });
+
+        getLogger().info("Executing remote Discord command from '{}': {}", actor, command_line);
+        result.dispatched = getServer().dispatchCommand(wrapper, command_line);
+        result.ok = result.dispatched;
+        promise->set_value(std::move(result));
+    });
+
+    if (future.wait_for(std::chrono::milliseconds(config_.bot_bridge.request_timeout_ms)) != std::future_status::ready) {
+        res.status = 504;
+        res.set_content(R"({"ok":false,"error":"timed out waiting for main-thread command execution"})", "application/json");
+        return;
+    }
+
+    const auto result = future.get();
+    res.status = result.ok ? 200 : 400;
+    res.set_content(json({{"ok", result.ok},
+                          {"dispatched", result.dispatched},
+                          {"output", result.output},
+                          {"errors", result.errors}})
+                        .dump(),
+                    "application/json");
+}
+
+void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res)
+{
+    if (!isAuthorizedBotBridgeRequest(req, res)) {
+        return;
+    }
+
+    std::size_t queue_depth = 0;
+    {
+        std::lock_guard lock(queue_mutex_);
+        queue_depth = webhook_queue_.size();
+    }
+
+    res.status = 200;
+    res.set_content(json({{"ok", true},
+                          {"server_name", getServer().getName()},
+                          {"minecraft_version", getServer().getMinecraftVersion()},
+                          {"online_players", getServer().getOnlinePlayers().size()},
+                          {"webhook_configured", webhook_target_.has_value()},
+                          {"webhook_queue_depth", queue_depth},
+                          {"avatar_enabled", config_.avatar.enabled},
+                          {"avatar_base_url", getEffectiveAvatarBaseUrl().value_or("")},
+                          {"bot_bridge_enabled", config_.bot_bridge.enabled}})
+                        .dump(),
+                    "application/json");
+}
+
+bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const
+{
+    if (!config_.bot_bridge.enabled) {
+        res.status = 403;
+        res.set_content(R"({"ok":false,"error":"bot bridge disabled"})", "application/json");
+        return false;
+    }
+
+    if (config_.bot_bridge.allow_local_requests_only && !isLoopbackAddress(req.remote_addr)) {
+        res.status = 403;
+        res.set_content(R"({"ok":false,"error":"request is not from a loopback address"})", "application/json");
+        return false;
+    }
+
+    const auto expected_secret = normalizeSecret(config_.bot_bridge.shared_secret);
+    if (expected_secret.empty()) {
+        res.status = 503;
+        res.set_content(R"({"ok":false,"error":"bot bridge secret is not configured"})", "application/json");
+        return false;
+    }
+
+    auto provided_secret = normalizeSecret(req.get_header_value("X-Bridge-Secret"));
+    if (provided_secret.empty()) {
+        auto authorization = req.get_header_value("Authorization");
+        if (authorization.starts_with("Bearer ")) {
+            provided_secret = normalizeSecret(authorization.substr(7));
+        }
+    }
+
+    if (provided_secret != expected_secret) {
+        res.status = 401;
+        res.set_content(R"({"ok":false,"error":"invalid bridge secret"})", "application/json");
+        return false;
+    }
+
+    return true;
 }
 
 std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(const endstone::Player &player)
@@ -902,9 +1173,23 @@ std::string BedrockDiscordBridgePlugin::normalizeRoutePrefix(const std::string &
     return route;
 }
 
+std::string BedrockDiscordBridgePlugin::normalizeSecret(std::string value)
+{
+    value.erase(value.begin(),
+                std::find_if(value.begin(), value.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    value.erase(std::find_if(value.rbegin(), value.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(),
+                value.end());
+    return value;
+}
+
 bool BedrockDiscordBridgePlugin::isWildcardHost(const std::string &host)
 {
     return host == "0.0.0.0" || host == "::" || host == "[::]";
+}
+
+bool BedrockDiscordBridgePlugin::isLoopbackAddress(const std::string &host)
+{
+    return host == "127.0.0.1" || host == "::1" || host == "::ffff:127.0.0.1" || host == "localhost";
 }
 
 std::string BedrockDiscordBridgePlugin::joinUrl(const std::string &base, const std::string &leaf)
@@ -952,6 +1237,45 @@ std::optional<std::string> BedrockDiscordBridgePlugin::getEffectiveAvatarBaseUrl
     }
 
     return std::nullopt;
+}
+
+std::string BedrockDiscordBridgePlugin::messageToPlainText(const endstone::Message &message)
+{
+    return std::visit(
+        [](const auto &value) -> std::string {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<T, std::string>) {
+                return value;
+            }
+            else {
+                std::string rendered = value.getText();
+                if (!value.getParameters().empty()) {
+                    rendered += " [";
+                    for (std::size_t i = 0; i < value.getParameters().size(); ++i) {
+                        if (i > 0) {
+                            rendered += ", ";
+                        }
+                        rendered += value.getParameters()[i];
+                    }
+                    rendered += "]";
+                }
+                return rendered;
+            }
+        },
+        message);
+}
+
+std::string BedrockDiscordBridgePlugin::truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
+{
+    if (value.size() <= max_bytes) {
+        return value;
+    }
+
+    std::size_t end = max_bytes;
+    while (end > 0 && (static_cast<unsigned char>(value[end]) & 0xC0U) == 0x80U) {
+        --end;
+    }
+    return value.substr(0, end);
 }
 
 std::string BedrockDiscordBridgePlugin::escapeJson(const std::string &value)
