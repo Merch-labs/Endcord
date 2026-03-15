@@ -31,5 +31,15 @@
       "cache_control": "public, max-age=86400",
       "thread_count": 4
     }
+  },
+  "bot_bridge": {
+    "enabled": true,
+    "shared_secret": "change-me",
+    "api_route_prefix": "/bedrock-discord-bridge/api",
+    "allow_local_requests_only": true,
+    "inbound_chat_enabled": true,
+    "command_enabled": true,
+    "inbound_chat_template": "[Discord] #{channel} <{author}> {content}",
+    "request_timeout_ms": 5000
   }
 }

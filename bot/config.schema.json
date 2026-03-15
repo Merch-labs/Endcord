@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bedrock-discord-bridge.local/bot-config.schema.json",
+  "title": "Bedrock Discord Bridge Bot Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "discord",
+    "plugin_bridge",
+    "relay",
+    "slash_commands"
+  ],
+  "properties": {
+    "discord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "guild_id",
+        "relay_channel_ids",
+        "command_role_ids",
+        "status_role_ids",
+        "relay_to_game_enabled",
+        "sync_commands_globally"
+      ],
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "guild_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "relay_channel_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "command_role_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "status_role_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "relay_to_game_enabled": {
+          "type": "boolean"
+        },
+        "sync_commands_globally": {
+          "type": "boolean"
+        }
+      }
+    },
+    "plugin_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_url",
+        "shared_secret",
+        "request_timeout_seconds"
+      ],
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "shared_secret": {
+          "type": "string"
+        },
+        "request_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "relay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include_attachment_urls",
+        "include_jump_url",
+        "max_message_length"
+      ],
+      "properties": {
+        "include_attachment_urls": {
+          "type": "boolean"
+        },
+        "include_jump_url": {
+          "type": "boolean"
+        },
+        "max_message_length": {
+          "type": "integer",
+          "minimum": 32
+        }
+      }
+    },
+    "slash_commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "ephemeral_responses"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ephemeral_responses": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

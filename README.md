@@ -1,6 +1,6 @@
 # Bedrock Discord Bridge
 
-Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding to Discord with JSON config, per-player webhook identity, rendered skin-head avatars, and built-in avatar hosting.
+Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecraft Bedrock bridge with JSON configuration, per-player webhook identity, rendered skin-head avatars, built-in avatar hosting, and a secure local bot API.
 
 ## What is included
 
@@ -11,7 +11,9 @@ Linux-ready Endstone C++ Endstone plugin for Minecraft Bedrock chat forwarding t
 - Bedrock skin face plus hat-overlay rendering to PNG
 - Local avatar cache under the plugin data folder
 - Built-in HTTP server for serving avatar PNGs
-- JSON config with nested sections for Discord, queue, and avatar hosting
+- Secure local bot bridge API for Discord-to-Minecraft relay and remote command execution
+- JSON config with nested sections for Discord, queue, avatar hosting, and bot bridge settings
+- Companion Discord bot with its own JSON config and slash commands
 - `/discordbridge status` and `/discordbridge reload`
 
 ## Build on Linux
@@ -53,6 +55,8 @@ You can also start from:
 cp config/config.json.example path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
 ```
 
+Schema for editor validation is included at [config/config.schema.json](config/config.schema.json).
+
 Admin commands:
 
 - `/discordbridge status`
@@ -68,6 +72,11 @@ Config notes:
 - If `avatar.http_server.public_base_url` is set, the plugin uses it to build Discord `avatar_url` values.
 - If `avatar.public_base_url` and `avatar.http_server.public_base_url` are both empty, the plugin derives a local base URL only when `bind_host` is not a wildcard address.
 - `queue.max_size`, `queue.max_attempts`, and timeout values control webhook behavior under load.
+- `bot_bridge.enabled` turns on the local HTTP API used by the companion Discord bot.
+- `bot_bridge.shared_secret` must match the bot config exactly.
+- `bot_bridge.api_route_prefix` must line up with the bot's `plugin_bridge.base_url`.
+- `bot_bridge.allow_local_requests_only` should stay `true` unless you intentionally expose the API behind another trusted hop.
+- `bot_bridge.inbound_chat_template` supports `{author}`, `{content}`, `{channel}`, and `{guild}`.
 
 ## Avatar hosting
 
@@ -109,10 +118,42 @@ Rate-limit strategy:
 - Cache avatar URLs aggressively so avatar renders are much rarer than chat sends
 - Retry transient webhook failures with bounded backoff instead of blocking the server thread
 
-## Current scope
+## Companion bot
 
-- Implemented: Minecraft-to-Discord relay via webhook
-- Implemented: local avatar rendering/cache pipeline for Bedrock skins
-- Implemented: built-in avatar HTTP server and JSON config
-- Implemented: Linux `.so` build path for Endstone
-- Not implemented by design: Discord bot/gateway side. Mature bridges typically keep that as a separate bot process or service from the game plugin.
+The repo now includes a companion bot under [bot/README.md](bot/README.md).
+
+Quick start:
+
+```bash
+cd bot
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+cp config.json.example config.json
+bedrock-discord-bridge-bot config.json
+```
+
+Bot config highlights:
+
+- `discord.relay_channel_ids` limits which Discord channels relay into Minecraft.
+- `discord.command_role_ids` and `discord.status_role_ids` control who can use slash commands.
+- `plugin_bridge.base_url` should match `http://127.0.0.1:<port><api_route_prefix>`.
+- `relay.include_attachment_urls`, `relay.include_jump_url`, and `relay.max_message_length` tune how Discord messages are projected into chat.
+- Slash commands provided today: `/mcstatus`, `/mccommand`, `/mcreloadbridge`.
+
+## Deployment order
+
+1. Build the plugin with `cmake --preset linux-clang-local-libcxx` and `cmake --build --preset build-local`.
+2. Copy `build-local/endstone_bedrock_discord_bridge.so` into your Bedrock server `plugins/` directory.
+3. Copy [config/config.json.example](config/config.json.example) to the plugin data folder as `config.json` and fill in the webhook plus bot bridge settings.
+4. Start the server once so the plugin creates its data directories and avatar cache path.
+5. Set up the companion bot from [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json), making sure `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`.
+6. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled.
+
+## Implemented scope
+
+- Implemented: Minecraft-to-Discord relay via webhook with per-message username and avatar URL support
+- Implemented: Bedrock skin head rendering, caching, and built-in avatar HTTP serving
+- Implemented: Discord-to-Minecraft relay through the companion bot and secure plugin API
+- Implemented: Slash-command driven status, reload, and remote command execution
+- Implemented: Linux `.so` build path for Endstone and JSON-driven runtime configuration

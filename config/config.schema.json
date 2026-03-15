@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bedrock-discord-bridge.local/plugin-config.schema.json",
+  "title": "Bedrock Discord Bridge Plugin Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "config_version",
+    "enabled",
+    "discord",
+    "queue",
+    "avatar",
+    "bot_bridge"
+  ],
+  "properties": {
+    "config_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "discord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "webhook_url",
+        "username_template",
+        "content_template",
+        "allow_mentions",
+        "max_username_length",
+        "max_content_length"
+      ],
+      "properties": {
+        "webhook_url": {
+          "type": "string"
+        },
+        "username_template": {
+          "type": "string"
+        },
+        "content_template": {
+          "type": "string"
+        },
+        "allow_mentions": {
+          "type": "boolean"
+        },
+        "max_username_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 80
+        },
+        "max_content_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_size",
+        "max_attempts",
+        "retry_delay_ms",
+        "connect_timeout_ms",
+        "read_timeout_ms",
+        "write_timeout_ms"
+      ],
+      "properties": {
+        "max_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "retry_delay_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "connect_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "read_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "write_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        }
+      }
+    },
+    "avatar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "size",
+        "cache_subdirectory",
+        "public_base_url",
+        "http_server"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 512
+        },
+        "cache_subdirectory": {
+          "type": "string"
+        },
+        "public_base_url": {
+          "type": "string"
+        },
+        "http_server": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "bind_host",
+            "port",
+            "route_prefix",
+            "public_base_url",
+            "cache_control",
+            "thread_count"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "bind_host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "route_prefix": {
+              "type": "string"
+            },
+            "public_base_url": {
+              "type": "string"
+            },
+            "cache_control": {
+              "type": "string"
+            },
+            "thread_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          }
+        }
+      }
+    },
+    "bot_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "shared_secret",
+        "api_route_prefix",
+        "allow_local_requests_only",
+        "inbound_chat_enabled",
+        "command_enabled",
+        "inbound_chat_template",
+        "request_timeout_ms"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "shared_secret": {
+          "type": "string"
+        },
+        "api_route_prefix": {
+          "type": "string"
+        },
+        "allow_local_requests_only": {
+          "type": "boolean"
+        },
+        "inbound_chat_enabled": {
+          "type": "boolean"
+        },
+        "command_enabled": {
+          "type": "boolean"
+        },
+        "inbound_chat_template": {
+          "type": "string"
+        },
+        "request_timeout_ms": {
+          "type": "integer",
+          "minimum": 250
+        }
+      }
+    }
+  }
+}

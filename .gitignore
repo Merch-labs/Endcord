@@ -3,3 +3,9 @@ build-clang/
 build-local/
 .deps/
 a.out
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+bot/.venv/
+bot/config.json

@@ -1,2 +1,0 @@
-aiohttp<4,>=3.9
-discord.py==2.7.1

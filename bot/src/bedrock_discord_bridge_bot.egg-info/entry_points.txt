@@ -1,2 +1,0 @@
-[console_scripts]
-bedrock-discord-bridge-bot = bridge_bot.main:main
