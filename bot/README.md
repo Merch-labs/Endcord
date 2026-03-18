@@ -11,9 +11,11 @@ Companion Discord bot for the Endstone Bedrock Discord Bridge plugin.
 
 ## Setup
 
+The intended runtime model is simple: keep the bot in the same local runtime environment as Endstone so `plugin_bridge.base_url` can stay on `127.0.0.1`.
+
 ```bash
 cd bot
-./scripts/bootstrap-host.sh
+./scripts/bootstrap-local-runtime.sh
 ```
 
 Fill in:
@@ -30,7 +32,7 @@ Fill in:
 Then run:
 
 ```bash
-./scripts/run-host.sh
+./scripts/run-local-runtime.sh
 ```
 
 Schema for editor validation is included at [config.schema.json](bot/config.schema.json).
@@ -67,14 +69,11 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 
 `/mccommand` and `/mcreloadbridge` can be restricted by `discord.command_role_ids`.
 
-## Recommended runtime
+## Colocated runtime
 
-Run the bot on the same host as the Bedrock server when the plugin keeps `bot_bridge.allow_local_requests_only` enabled. That gives you a simple and safer default: Discord reaches the bot, and only the local bot reaches the plugin API.
+Run the bot in the same local runtime environment as the Endstone server so the bridge stays on `127.0.0.1` and there is no environment-specific decision to make in normal use.
 
-## Host service
-
-The bot does not need Docker. For normal installs, run it as a plain host process or a service.
-
-- Bootstrap the venv and local editable install with [bootstrap-host.sh](bot/scripts/bootstrap-host.sh).
-- Start it with [run-host.sh](bot/scripts/run-host.sh).
+- Bootstrap the venv and local editable install with [bootstrap-local-runtime.sh](bot/scripts/bootstrap-local-runtime.sh).
+- Start it with [run-local-runtime.sh](bot/scripts/run-local-runtime.sh).
+- The older [bootstrap-host.sh](bot/scripts/bootstrap-host.sh) and [run-host.sh](bot/scripts/run-host.sh) names are kept as compatibility wrappers.
 - If you want it to start automatically on boot, adapt [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example) for your install path and enable it with `systemctl`.

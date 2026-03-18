@@ -160,8 +160,8 @@ Quick start:
 
 ```bash
 cd bot
-./scripts/bootstrap-host.sh
-./scripts/run-host.sh
+./scripts/bootstrap-local-runtime.sh
+./scripts/run-local-runtime.sh
 ```
 
 Bot-only test command:
@@ -176,7 +176,7 @@ Bot config highlights:
 - `discord.guild_id` can stay `0` if you want the bot to derive the guild from the first configured channel.
 - `discord.auto_create_webhook` and `plugin_bridge.configure_webhook_on_startup` are the easiest-distribution path: the bot creates or reuses the outbound webhook and injects it into the plugin automatically. Keep the configured webhook name free of the word `Discord`, because Discord rejects it in webhook names.
 - `discord.command_role_ids` and `discord.status_role_ids` control who can use slash commands.
-- `plugin_bridge.base_url` should match `http://127.0.0.1:<port><api_route_prefix>` or another allowlisted bridge address.
+- `plugin_bridge.base_url` should normally stay on `http://127.0.0.1:<port><api_route_prefix>` because the intended runtime model is to keep the bot in the same local runtime environment as Endstone.
 - `plugin_bridge.request_max_retries`, `plugin_bridge.request_retry_base_seconds`, and `plugin_bridge.request_retry_max_seconds` control retry/backoff for safe bridge operations.
 - `relay.message_template`, `relay.attachment_template`, `relay.jump_url_template`, and `relay.join_separator` control how Discord messages are projected into Minecraft before the plugin wraps them with `bot_bridge.inbound_chat_template`.
 - `relay.ignore_bot_messages` and `relay.ignore_webhook_messages` let you decide whether other automation can talk back into Minecraft.
@@ -184,7 +184,7 @@ Bot config highlights:
 - `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` control bot verbosity.
 - `system_messages.enabled` turns on bot-owned join/quit/death delivery, `system_messages.channel_id` selects the target channel, and `system_messages.message_template` supports `{content}`, `{event}`, and `{player_name}`.
 - Slash commands provided today: `/mcstatus`, `/mccommand`, `/mcreloadbridge`.
-- Host-first launcher scripts live under [bot/scripts/bootstrap-host.sh](bot/scripts/bootstrap-host.sh) and [bot/scripts/run-host.sh](bot/scripts/run-host.sh).
+- Colocated-runtime launcher scripts live under [bot/scripts/bootstrap-local-runtime.sh](bot/scripts/bootstrap-local-runtime.sh) and [bot/scripts/run-local-runtime.sh](bot/scripts/run-local-runtime.sh).
 - A sample service file for non-Docker deployments is included at [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
 
 ## Deployment order
@@ -195,7 +195,7 @@ Bot config highlights:
 4. Start the server once so the plugin creates its data directories and avatar cache path.
 5. Set up the companion bot from [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json), making sure `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`.
 6. Fill in `discord.token` and at least one channel id. The default bot config can auto-derive the guild and auto-create the webhook.
-7. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled, ideally through [bot/scripts/run-host.sh](bot/scripts/run-host.sh) or a system service based on [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
+7. Run the bot in the same local runtime environment as Endstone while `bot_bridge.allow_local_requests_only` is enabled, ideally through [bot/scripts/run-local-runtime.sh](bot/scripts/run-local-runtime.sh) or a system service based on [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
 
 ## Implemented scope
 
