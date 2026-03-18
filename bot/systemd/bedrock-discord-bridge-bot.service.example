@@ -1,0 +1,14 @@
+[Unit]
+Description=Bedrock Discord Bridge companion bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bedrock-discord-bridge/bot
+ExecStart=/opt/bedrock-discord-bridge/bot/scripts/run-host.sh /opt/bedrock-discord-bridge/bot/config.json
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

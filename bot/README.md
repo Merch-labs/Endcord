@@ -13,10 +13,7 @@ Companion Discord bot for the Endstone Bedrock Discord Bridge plugin.
 
 ```bash
 cd bot
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
-cp config.json.example config.json
+./scripts/bootstrap-host.sh
 ```
 
 Fill in:
@@ -33,7 +30,7 @@ Fill in:
 Then run:
 
 ```bash
-bedrock-discord-bridge-bot config.json
+./scripts/run-host.sh
 ```
 
 Schema for editor validation is included at [config.schema.json](bot/config.schema.json).
@@ -73,3 +70,11 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 ## Recommended runtime
 
 Run the bot on the same host as the Bedrock server when the plugin keeps `bot_bridge.allow_local_requests_only` enabled. That gives you a simple and safer default: Discord reaches the bot, and only the local bot reaches the plugin API.
+
+## Host service
+
+The bot does not need Docker. For normal installs, run it as a plain host process or a service.
+
+- Bootstrap the venv and local editable install with [bootstrap-host.sh](bot/scripts/bootstrap-host.sh).
+- Start it with [run-host.sh](bot/scripts/run-host.sh).
+- If you want it to start automatically on boot, adapt [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example) for your install path and enable it with `systemctl`.

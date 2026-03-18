@@ -160,11 +160,8 @@ Quick start:
 
 ```bash
 cd bot
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
-cp config.json.example config.json
-bedrock-discord-bridge-bot config.json
+./scripts/bootstrap-host.sh
+./scripts/run-host.sh
 ```
 
 Bot-only test command:
@@ -187,6 +184,8 @@ Bot config highlights:
 - `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` control bot verbosity.
 - `system_messages.enabled` turns on bot-owned join/quit/death delivery, `system_messages.channel_id` selects the target channel, and `system_messages.message_template` supports `{content}`, `{event}`, and `{player_name}`.
 - Slash commands provided today: `/mcstatus`, `/mccommand`, `/mcreloadbridge`.
+- Host-first launcher scripts live under [bot/scripts/bootstrap-host.sh](bot/scripts/bootstrap-host.sh) and [bot/scripts/run-host.sh](bot/scripts/run-host.sh).
+- A sample service file for non-Docker deployments is included at [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
 
 ## Deployment order
 
@@ -196,7 +195,7 @@ Bot config highlights:
 4. Start the server once so the plugin creates its data directories and avatar cache path.
 5. Set up the companion bot from [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json), making sure `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`.
 6. Fill in `discord.token` and at least one channel id. The default bot config can auto-derive the guild and auto-create the webhook.
-7. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled.
+7. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled, ideally through [bot/scripts/run-host.sh](bot/scripts/run-host.sh) or a system service based on [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
 
 ## Implemented scope
 

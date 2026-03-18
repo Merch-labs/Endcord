@@ -80,3 +80,6 @@ jobs:
             bot/dist/*
             plugins/endcord/bot/config.json
             bot/config.schema.json
+            bot/scripts/bootstrap-host.sh
+            bot/scripts/run-host.sh
+            bot/systemd/bedrock-discord-bridge-bot.service.example
