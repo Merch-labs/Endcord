@@ -80,7 +80,6 @@
       "additionalProperties": false,
       "required": [
         "base_url",
-        "shared_secret",
         "request_timeout_seconds",
         "configure_webhook_on_startup",
         "request_max_retries",
@@ -93,7 +92,8 @@
           "pattern": "^https?://"
         },
         "shared_secret": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional advanced override. If omitted, the bot reads bot_bridge.shared_secret from the colocated plugin config."
         },
         "request_timeout_seconds": {
           "type": "integer",

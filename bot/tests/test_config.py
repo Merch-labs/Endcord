@@ -12,8 +12,16 @@ from bridge_bot.config import BotConfig  # noqa: E402
 
 
 class BotConfigTests(unittest.TestCase):
-    def write_config(self, payload: dict) -> Path:
-        temp_dir = Path(tempfile.mkdtemp(prefix="bridge-bot-config-"))
+    def write_config(self, payload: dict, plugin_secret: str | None = "secret") -> Path:
+        temp_root = Path(tempfile.mkdtemp(prefix="bridge-bot-config-"))
+        temp_dir = temp_root / "endcord" / "bot"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        if plugin_secret is not None:
+            plugin_config_path = temp_root / "endcord" / "config.json"
+            plugin_config_path.write_text(
+                json.dumps({"bot_bridge": {"shared_secret": plugin_secret}}),
+                encoding="utf-8",
+            )
         path = temp_dir / "config.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
@@ -36,7 +44,6 @@ class BotConfigTests(unittest.TestCase):
                     },
                     "plugin_bridge": {
                         "base_url": "http://127.0.0.1:8089/endcord/api",
-                        "shared_secret": "secret",
                         "request_timeout_seconds": 10,
                         "configure_webhook_on_startup": True,
                         "request_max_retries": 3,
@@ -77,7 +84,6 @@ class BotConfigTests(unittest.TestCase):
                 },
                 "plugin_bridge": {
                     "base_url": "http://127.0.0.1:8089/endcord/api",
-                    "shared_secret": "secret",
                     "request_timeout_seconds": 10,
                     "configure_webhook_on_startup": True,
                     "request_max_retries": 3,
@@ -107,7 +113,6 @@ class BotConfigTests(unittest.TestCase):
                 },
                 "plugin_bridge": {
                     "base_url": "http://127.0.0.1:8089/endcord/api",
-                    "shared_secret": "secret",
                     "request_timeout_seconds": 10,
                     "configure_webhook_on_startup": True,
                     "request_max_retries": 3,
@@ -139,7 +144,6 @@ class BotConfigTests(unittest.TestCase):
                     },
                     "plugin_bridge": {
                         "base_url": "http://127.0.0.1:8089/endcord/api",
-                        "shared_secret": "secret",
                         "request_timeout_seconds": 10,
                         "configure_webhook_on_startup": True,
                         "request_max_retries": 3,
@@ -184,7 +188,6 @@ class BotConfigTests(unittest.TestCase):
                     },
                     "plugin_bridge": {
                         "base_url": "http://127.0.0.1:8089/endcord/api",
-                        "shared_secret": "secret",
                         "request_timeout_seconds": 10,
                         "configure_webhook_on_startup": True,
                         "request_max_retries": 3,
@@ -203,6 +206,68 @@ class BotConfigTests(unittest.TestCase):
         self.assertEqual(config.slash_commands.command.role_ids, [3001])
         self.assertEqual(config.slash_commands.ping.role_ids, [3002])
         self.assertEqual(config.slash_commands.configreload.role_ids, [3001])
+
+    def test_uses_explicit_shared_secret_when_present(self) -> None:
+        config = BotConfig.load(
+            self.write_config(
+                {
+                    "discord": {
+                        "token": "token",
+                        "guild_id": 1,
+                        "relay_channel_ids": [123],
+                        "outbound_channel_id": 0,
+                        "command_role_ids": [],
+                        "status_role_ids": [],
+                        "relay_to_game_enabled": True,
+                        "sync_commands_globally": False,
+                        "auto_create_webhook": True,
+                        "webhook_name": "Endcord",
+                    },
+                    "plugin_bridge": {
+                        "base_url": "http://127.0.0.1:8089/endcord/api",
+                        "shared_secret": "explicit-secret",
+                        "request_timeout_seconds": 10,
+                        "configure_webhook_on_startup": True,
+                        "request_max_retries": 3,
+                        "request_retry_base_seconds": 1.5,
+                        "request_retry_max_seconds": 15.0,
+                    },
+                },
+                plugin_secret="other-secret",
+            )
+        )
+
+        self.assertEqual(config.plugin_bridge.shared_secret, "explicit-secret")
+
+    def test_requires_discoverable_shared_secret_when_not_explicit(self) -> None:
+        path = self.write_config(
+            {
+                "discord": {
+                    "token": "token",
+                    "guild_id": 1,
+                    "relay_channel_ids": [123],
+                    "outbound_channel_id": 0,
+                    "command_role_ids": [],
+                    "status_role_ids": [],
+                    "relay_to_game_enabled": True,
+                    "sync_commands_globally": False,
+                    "auto_create_webhook": True,
+                    "webhook_name": "Endcord",
+                },
+                "plugin_bridge": {
+                    "base_url": "http://127.0.0.1:8089/endcord/api",
+                    "request_timeout_seconds": 10,
+                    "configure_webhook_on_startup": True,
+                    "request_max_retries": 3,
+                    "request_retry_base_seconds": 1.5,
+                    "request_retry_max_seconds": 15.0,
+                },
+            },
+            plugin_secret=None,
+        )
+
+        with self.assertRaisesRegex(ValueError, "shared_secret"):
+            BotConfig.load(path)
 
 
 if __name__ == "__main__":

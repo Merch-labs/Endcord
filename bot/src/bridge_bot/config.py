@@ -101,6 +101,29 @@ class BotConfig:
     system_messages: SystemMessageConfig
 
     @staticmethod
+    def _resolve_shared_secret(config_path: Path, plugin_cfg: dict) -> str:
+        explicit_secret = str(plugin_cfg.get("shared_secret", "")).strip()
+        if explicit_secret and explicit_secret != "change-me":
+            return explicit_secret
+
+        plugin_config_path = config_path.parent.parent / "config.json"
+        if not plugin_config_path.is_file():
+            raise ValueError(
+                "plugin_bridge.shared_secret must be configured or the bot config must live in plugins/endcord/bot/"
+            )
+
+        plugin_root = json.loads(plugin_config_path.read_text(encoding="utf-8"))
+        bot_bridge_cfg = plugin_root.get("bot_bridge", {})
+        if not isinstance(bot_bridge_cfg, dict):
+            raise ValueError(f"plugin config at {plugin_config_path} is missing bot_bridge settings")
+
+        discovered_secret = str(bot_bridge_cfg.get("shared_secret", "")).strip()
+        if not discovered_secret or discovered_secret == "change-me":
+            raise ValueError(f"plugin config at {plugin_config_path} must set bot_bridge.shared_secret")
+
+        return discovered_secret
+
+    @staticmethod
     def load(path: Path) -> "BotConfig":
         data = json.loads(path.read_text(encoding="utf-8"))
 
@@ -135,7 +158,7 @@ class BotConfig:
             ),
             plugin_bridge=PluginBridgeConfig(
                 base_url=str(plugin_cfg["base_url"]).rstrip("/"),
-                shared_secret=str(plugin_cfg["shared_secret"]).strip(),
+                shared_secret=BotConfig._resolve_shared_secret(path, plugin_cfg),
                 request_timeout_seconds=max(int(plugin_cfg.get("request_timeout_seconds", 10)), 1),
                 configure_webhook_on_startup=bool(plugin_cfg.get("configure_webhook_on_startup", True)),
                 request_max_retries=max(int(plugin_cfg.get("request_max_retries", 3)), 0),
@@ -198,8 +221,6 @@ class BotConfig:
             raise ValueError("configure at least one discord.relay_channel_ids entry or discord.outbound_channel_id")
         if not config.plugin_bridge.base_url.startswith(("http://", "https://")):
             raise ValueError("plugin_bridge.base_url must start with http:// or https://")
-        if not config.plugin_bridge.shared_secret or config.plugin_bridge.shared_secret == "change-me":
-            raise ValueError("plugin_bridge.shared_secret must be configured")
         if config.presence.status not in {"online", "idle", "dnd", "invisible"}:
             raise ValueError("presence.status must be one of online, idle, dnd, invisible")
         if config.presence.activity_type not in {"playing", "streaming", "listening", "watching", "competing", "custom"}:

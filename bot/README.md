@@ -28,7 +28,6 @@ Before running, fill in:
 
 - `discord.token`
 - `discord.relay_channel_ids`
-- `plugin_bridge.shared_secret`
 
 Optional but common:
 
@@ -44,8 +43,8 @@ Schema:
 
 - `plugin_bridge.base_url`
   - usually `http://127.0.0.1:8089/endcord/api`
-- `plugin_bridge.shared_secret`
-  - must match `bot_bridge.shared_secret` in the plugin config
+- `bot_bridge.shared_secret` in the plugin config
+  - the bot reads it automatically from `plugins/endcord/config.json`
 - `discord.auto_create_webhook`
   - lets the bot provision the webhook automatically
 - `plugin_bridge.configure_webhook_on_startup`

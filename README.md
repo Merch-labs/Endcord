@@ -91,7 +91,6 @@ Then edit:
 
 - `discord.token`
 - `discord.relay_channel_ids`
-- `plugin_bridge.shared_secret`
 
 Usually you can leave these as-is:
 
@@ -99,6 +98,8 @@ Usually you can leave these as-is:
 - `discord.auto_create_webhook = true`
 - `plugin_bridge.configure_webhook_on_startup = true`
 - `plugin_bridge.base_url = http://127.0.0.1:8089/endcord/api`
+
+The bot will automatically read `bot_bridge.shared_secret` from the colocated plugin config.
 
 Bot schema:
 - [bot/config.schema.json](bot/config.schema.json)
@@ -228,7 +229,7 @@ Bot slash command settings:
 Check:
 
 - the bot is running
-- `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`
+- the bot config is at `plugins/endcord/bot/config.json`
 - `plugin_bridge.base_url` points at `127.0.0.1`
 - `discord.relay_channel_ids` contains the right channel
 
