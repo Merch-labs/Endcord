@@ -1,8 +1,9 @@
 {
-  "config_version": 3,
+  "config_version": 5,
   "enabled": true,
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/replace-me",
+    "allow_runtime_webhook_override": true,
     "username_template": "{player}",
     "content_template": "{message}",
     "system_username_template": "{server}",
@@ -31,6 +32,12 @@
   },
   "avatar": {
     "enabled": true,
+    "mode": "provider",
+    "provider": "tabavatars",
+    "provider_url_template": "",
+    "provider_prefer_xuid": true,
+    "provider_render_type": "helm",
+    "provider_bedrock_username_prefix": ".",
     "size": 64,
     "cache_subdirectory": "avatars",
     "public_base_url": "",
@@ -49,12 +56,14 @@
     "shared_secret": "change-me",
     "api_route_prefix": "/bedrock-discord-bridge/api",
     "allow_local_requests_only": true,
+    "allowed_remote_addresses": [],
     "inbound_chat_enabled": true,
     "command_enabled": true,
     "outbound_system_messages_enabled": false,
     "inbound_chat_template": "[Discord] #{channel} <{author}> {content}",
     "inbound_chat_max_length": 2000,
     "outbound_system_message_max_batch": 20,
+    "outbound_system_message_queue_max_size": 256,
     "request_timeout_ms": 5000
   },
   "logging": {

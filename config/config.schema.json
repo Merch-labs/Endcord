@@ -27,6 +27,7 @@
       "additionalProperties": false,
       "required": [
         "webhook_url",
+        "allow_runtime_webhook_override",
         "username_template",
         "content_template",
         "system_username_template",
@@ -41,6 +42,9 @@
       "properties": {
         "webhook_url": {
           "type": "string"
+        },
+        "allow_runtime_webhook_override": {
+          "type": "boolean"
         },
         "username_template": {
           "type": "string"
@@ -150,6 +154,12 @@
       "additionalProperties": false,
       "required": [
         "enabled",
+        "mode",
+        "provider",
+        "provider_url_template",
+        "provider_prefer_xuid",
+        "provider_render_type",
+        "provider_bedrock_username_prefix",
         "size",
         "cache_subdirectory",
         "public_base_url",
@@ -158,6 +168,26 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["provider", "rendered", "disabled"]
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["tabavatars", "mcheads", "custom"]
+        },
+        "provider_url_template": {
+          "type": "string"
+        },
+        "provider_prefer_xuid": {
+          "type": "boolean"
+        },
+        "provider_render_type": {
+          "type": "string"
+        },
+        "provider_bedrock_username_prefix": {
+          "type": "string"
         },
         "size": {
           "type": "integer",
@@ -220,12 +250,14 @@
         "shared_secret",
         "api_route_prefix",
         "allow_local_requests_only",
+        "allowed_remote_addresses",
         "inbound_chat_enabled",
         "command_enabled",
         "outbound_system_messages_enabled",
         "inbound_chat_template",
         "inbound_chat_max_length",
         "outbound_system_message_max_batch",
+        "outbound_system_message_queue_max_size",
         "request_timeout_ms"
       ],
       "properties": {
@@ -240,6 +272,12 @@
         },
         "allow_local_requests_only": {
           "type": "boolean"
+        },
+        "allowed_remote_addresses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "inbound_chat_enabled": {
           "type": "boolean"
@@ -262,6 +300,11 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 100
+        },
+        "outbound_system_message_queue_max_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
         },
         "request_timeout_ms": {
           "type": "integer",

@@ -20,6 +20,7 @@ namespace httplib {
 struct Request;
 struct Response;
 class Server;
+class Client;
 }
 
 class BedrockDiscordBridgePlugin : public endstone::Plugin {
@@ -40,6 +41,7 @@ public:
 private:
     struct DiscordOptions {
         std::string webhook_url;
+        bool allow_runtime_webhook_override = true;
         std::string username_template = "{player}";
         std::string content_template = "{message}";
         std::string system_username_template = "{server}";
@@ -81,6 +83,12 @@ private:
 
     struct AvatarOptions {
         bool enabled = true;
+        std::string mode = "provider";
+        std::string provider = "tabavatars";
+        std::string provider_url_template;
+        bool provider_prefer_xuid = true;
+        std::string provider_render_type = "helm";
+        std::string provider_bedrock_username_prefix = ".";
         int size = 64;
         std::string cache_subdirectory = "avatars";
         std::string public_base_url;
@@ -92,12 +100,14 @@ private:
         std::string shared_secret;
         std::string api_route_prefix = "/bedrock-discord-bridge/api";
         bool allow_local_requests_only = true;
+        std::vector<std::string> allowed_remote_addresses{};
         bool inbound_chat_enabled = true;
         bool command_enabled = true;
         bool outbound_system_messages_enabled = false;
         std::string inbound_chat_template = "[Discord] #{channel} <{author}> {content}";
         int inbound_chat_max_length = 2000;
         int outbound_system_message_max_batch = 20;
+        int outbound_system_message_queue_max_size = 256;
         int request_timeout_ms = 5000;
     };
 
@@ -112,7 +122,7 @@ private:
     };
 
     struct BridgeConfig {
-        int config_version = 3;
+        int config_version = 5;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};
@@ -167,10 +177,14 @@ private:
     void handleBotBridgeChat(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeDrainSystemMessages(const httplib::Request &req, httplib::Response &res);
+    void handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res);
+    void handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
     bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
+    bool isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const;
 
     std::optional<std::string> getOrCreateAvatarUrl(const endstone::Player &player);
+    std::optional<std::string> buildProviderAvatarUrl(const endstone::Player &player) const;
     std::optional<AvatarCacheEntry> renderAvatarIfNeeded(const endstone::Player &player);
     bool writeHeadPng(const endstone::Skin &skin, const std::filesystem::path &output_path) const;
     static std::vector<std::uint8_t> renderHeadRgba(const endstone::Image &image, int avatar_size);
@@ -187,7 +201,12 @@ private:
     static std::string normalizeSecret(std::string value);
     static bool isWildcardHost(const std::string &host);
     static bool isLoopbackAddress(const std::string &host);
+    static bool isAllowedRemoteAddress(const std::string &host, const std::vector<std::string> &allowed_patterns);
+    static std::optional<std::uint32_t> parseIpv4Address(const std::string &value);
+    static std::string normalizeAvatarMode(std::string value);
+    static std::string normalizeAvatarProvider(std::string value);
     static std::string joinUrl(const std::string &base, const std::string &leaf);
+    static std::string urlEncode(const std::string &value);
     static std::string messageToPlainText(const endstone::Message &message);
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 
@@ -199,12 +218,14 @@ private:
 
     BridgeConfig config_;
     std::optional<WebhookTarget> webhook_target_;
+    bool runtime_webhook_override_active_ = false;
     std::unordered_map<std::string, AvatarCacheEntry> avatar_cache_;
 
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::deque<WebhookJob> webhook_queue_;
     std::thread worker_thread_;
+    std::unique_ptr<httplib::Client> webhook_client_;
     std::unique_ptr<httplib::Server> avatar_server_;
     std::thread avatar_server_thread_;
     bool stop_worker_ = false;
