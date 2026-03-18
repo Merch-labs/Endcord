@@ -1,4 +1,5 @@
 #include "bedrock_discord_bridge.h"
+#include "bridge_support.h"
 
 #include <httplib.h>
 #include <lodepng.h>
@@ -27,7 +28,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 namespace {
-using ReplacementList = std::vector<std::pair<std::string, std::string>>;
+using ReplacementList = bridge_support::ReplacementList;
 
 ReplacementList makePlayerTemplateReplacements(const endstone::Player &player, const std::string &payload,
                                                const std::string &event_name, const std::string &server_name)
@@ -557,8 +558,8 @@ void BedrockDiscordBridgePlugin::loadConfig()
     config_.queue.read_timeout_ms = std::max(config_.queue.read_timeout_ms, 100);
     config_.queue.write_timeout_ms = std::max(config_.queue.write_timeout_ms, 100);
     config_.avatar.size = std::clamp(config_.avatar.size, 8, 512);
-    config_.avatar.mode = normalizeAvatarMode(config_.avatar.mode);
-    config_.avatar.provider = normalizeAvatarProvider(config_.avatar.provider);
+    config_.avatar.mode = bridge_support::normalizeAvatarMode(config_.avatar.mode);
+    config_.avatar.provider = bridge_support::normalizeAvatarProvider(config_.avatar.provider);
     config_.avatar.http_server.port = std::clamp(config_.avatar.http_server.port, 1, 65535);
     config_.avatar.http_server.thread_count = std::clamp(config_.avatar.http_server.thread_count, 1, 64);
     config_.avatar.http_server.route_prefix =
@@ -811,8 +812,8 @@ void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &pl
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
     const auto replacements = makePlayerTemplateReplacements(player, message, "chat", getServer().getName());
-    auto username = applyTemplate(config_.discord.username_template, replacements);
-    auto content = applyTemplate(config_.discord.content_template, replacements);
+    auto username = bridge_support::applyTemplate(config_.discord.username_template, replacements);
+    auto content = bridge_support::applyTemplate(config_.discord.content_template, replacements);
 
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
 }
@@ -831,8 +832,8 @@ void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::
     }
 
     const auto replacements = makePlayerTemplateReplacements(player, event_message, event_name, getServer().getName());
-    auto username = applyTemplate(config_.discord.system_username_template, replacements);
-    auto content = applyTemplate(content_template, replacements);
+    auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
+    auto content = bridge_support::applyTemplate(content_template, replacements);
 
     std::optional<std::string> avatar_url = std::nullopt;
     if (config_.discord.use_player_avatar_for_system_messages) {
@@ -1089,7 +1090,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req
     }
 
     content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
-    const auto formatted = applyTemplate(
+    const auto formatted = bridge_support::applyTemplate(
         config_.bot_bridge.inbound_chat_template,
         makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, getServer().getName()));
     auto promise = std::make_shared<std::promise<void>>();
@@ -1342,7 +1343,7 @@ bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Req
 
     const bool remote_is_loopback = isLoopbackAddress(req.remote_addr);
     const bool remote_is_allowlisted =
-        isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
+        bridge_support::isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
 
     if (config_.bot_bridge.allow_local_requests_only && !remote_is_loopback && !remote_is_allowlisted) {
         res.status = 403;
@@ -1384,7 +1385,7 @@ bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Req
 bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const
 {
     return isLoopbackAddress(req.remote_addr) ||
-           isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
+           bridge_support::isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
 }
 
 void BedrockDiscordBridgePlugin::loadWebhookState()
@@ -1493,39 +1494,24 @@ std::optional<std::string> BedrockDiscordBridgePlugin::buildProviderAvatarUrl(co
     const auto uuid = player.getUniqueId().str();
 
     if (!config_.avatar.provider_url_template.empty()) {
-        auto url = applyTemplate(config_.avatar.provider_url_template,
-                                 {{"{player}", urlEncode(username)},
-                                  {"{username}", urlEncode(username)},
-                                  {"{xuid}", urlEncode(xuid)},
-                                  {"{uuid}", urlEncode(uuid)},
-                                  {"{uuid_nodashes}", urlEncode(replaceAll(uuid, "-", ""))},
-                                  {"{skin_id}", urlEncode(skin.getId())},
-                                  {"{size}", std::to_string(config_.avatar.size)},
-                                  {"{render_type}", urlEncode(config_.avatar.provider_render_type)}});
-        return url.empty() ? std::nullopt : std::optional<std::string>(url);
+        return bridge_support::buildProviderAvatarUrl(
+            {.provider = config_.avatar.provider,
+             .provider_url_template = config_.avatar.provider_url_template,
+             .provider_prefer_xuid = config_.avatar.provider_prefer_xuid,
+             .provider_render_type = config_.avatar.provider_render_type,
+             .provider_bedrock_username_prefix = config_.avatar.provider_bedrock_username_prefix,
+             .size = config_.avatar.size},
+            {.username = username, .xuid = xuid, .uuid = uuid, .skin_id = skin.getId()});
     }
 
-    if (config_.avatar.provider == "tabavatars") {
-        if (config_.avatar.provider_prefer_xuid && !xuid.empty()) {
-            return "https://tabavatars.net/avatar/?xuid=" + urlEncode(xuid) + "&size=" +
-                   std::to_string(config_.avatar.size) + "&type=" + urlEncode(config_.avatar.provider_render_type);
-        }
-        return "https://tabavatars.net/avatar/?username=" + urlEncode(username) + "&platform=bedrock&size=" +
-               std::to_string(config_.avatar.size) + "&type=" + urlEncode(config_.avatar.provider_render_type);
-    }
-
-    if (config_.avatar.provider == "mcheads") {
-        std::string identifier = username;
-        if (config_.avatar.provider_prefer_xuid && !xuid.empty()) {
-            identifier = xuid;
-        }
-        else if (!config_.avatar.provider_bedrock_username_prefix.empty()) {
-            identifier = config_.avatar.provider_bedrock_username_prefix + username;
-        }
-        return "https://api.mcheads.org/head/" + urlEncode(identifier) + "/" + std::to_string(config_.avatar.size);
-    }
-
-    return std::nullopt;
+    return bridge_support::buildProviderAvatarUrl(
+        {.provider = config_.avatar.provider,
+         .provider_url_template = config_.avatar.provider_url_template,
+         .provider_prefer_xuid = config_.avatar.provider_prefer_xuid,
+         .provider_render_type = config_.avatar.provider_render_type,
+         .provider_bedrock_username_prefix = config_.avatar.provider_bedrock_username_prefix,
+         .size = config_.avatar.size},
+        {.username = username, .xuid = xuid, .uuid = uuid, .skin_id = skin.getId()});
 }
 
 std::optional<BedrockDiscordBridgePlugin::AvatarCacheEntry>
@@ -1712,30 +1698,6 @@ std::string BedrockDiscordBridgePlugin::computeSkinCacheKey(const endstone::Skin
     return stream.str();
 }
 
-std::string BedrockDiscordBridgePlugin::applyTemplate(
-    std::string value, const std::vector<std::pair<std::string, std::string>> &replacements)
-{
-    for (const auto &[needle, replacement] : replacements) {
-        value = replaceAll(std::move(value), needle, replacement);
-    }
-    return value;
-}
-
-std::string BedrockDiscordBridgePlugin::replaceAll(std::string value, const std::string &needle,
-                                                   const std::string &replacement)
-{
-    if (needle.empty()) {
-        return value;
-    }
-
-    std::size_t pos = 0;
-    while ((pos = value.find(needle, pos)) != std::string::npos) {
-        value.replace(pos, needle.size(), replacement);
-        pos += replacement.size();
-    }
-    return value;
-}
-
 std::optional<BedrockDiscordBridgePlugin::WebhookTarget>
 BedrockDiscordBridgePlugin::parseWebhookUrl(const std::string &url)
 {
@@ -1809,100 +1771,6 @@ bool BedrockDiscordBridgePlugin::isLoopbackAddress(const std::string &host)
     return host == "127.0.0.1" || host == "::1" || host == "::ffff:127.0.0.1" || host == "localhost";
 }
 
-bool BedrockDiscordBridgePlugin::isAllowedRemoteAddress(const std::string &host,
-                                                        const std::vector<std::string> &allowed_patterns)
-{
-    if (allowed_patterns.empty()) {
-        return false;
-    }
-
-    const auto parsed_host = parseIpv4Address(host);
-    for (const auto &pattern : allowed_patterns) {
-        if (pattern == host) {
-            return true;
-        }
-
-        const auto slash = pattern.find('/');
-        if (slash == std::string::npos) {
-            if (parsed_host.has_value() && parseIpv4Address(pattern) == parsed_host) {
-                return true;
-            }
-            continue;
-        }
-
-        if (!parsed_host.has_value()) {
-            continue;
-        }
-
-        const auto network = parseIpv4Address(pattern.substr(0, slash));
-        if (!network.has_value()) {
-            continue;
-        }
-
-        try {
-            const auto bits = std::stoi(pattern.substr(slash + 1));
-            if (bits < 0 || bits > 32) {
-                continue;
-            }
-            const std::uint32_t mask = bits == 0 ? 0U : (0xFFFFFFFFU << (32 - bits));
-            if ((*parsed_host & mask) == (*network & mask)) {
-                return true;
-            }
-        }
-        catch (...) {
-            continue;
-        }
-    }
-
-    return false;
-}
-
-std::optional<std::uint32_t> BedrockDiscordBridgePlugin::parseIpv4Address(const std::string &value)
-{
-    std::array<unsigned int, 4> octets{};
-    char dot = '\0';
-    std::istringstream stream(value);
-    if (!(stream >> octets[0] >> dot) || dot != '.' || !(stream >> octets[1] >> dot) || dot != '.' ||
-        !(stream >> octets[2] >> dot) || dot != '.' || !(stream >> octets[3]) || !stream.eof()) {
-        return std::nullopt;
-    }
-
-    for (const auto octet : octets) {
-        if (octet > 255U) {
-            return std::nullopt;
-        }
-    }
-
-    return (octets[0] << 24U) | (octets[1] << 16U) | (octets[2] << 8U) | octets[3];
-}
-
-std::string BedrockDiscordBridgePlugin::normalizeAvatarMode(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return std::tolower(ch); });
-    if (value == "self_hosted" || value == "self-hosted" || value == "http_server") {
-        return "rendered";
-    }
-    if (value == "off" || value == "none") {
-        return "disabled";
-    }
-    if (value != "provider" && value != "rendered" && value != "disabled") {
-        return "provider";
-    }
-    return value;
-}
-
-std::string BedrockDiscordBridgePlugin::normalizeAvatarProvider(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return std::tolower(ch); });
-    if (value == "mc-heads" || value == "mc_heads") {
-        return "mcheads";
-    }
-    if (value.empty()) {
-        return "tabavatars";
-    }
-    return value;
-}
-
 std::string BedrockDiscordBridgePlugin::joinUrl(const std::string &base, const std::string &leaf)
 {
     if (base.empty()) {
@@ -1912,24 +1780,6 @@ std::string BedrockDiscordBridgePlugin::joinUrl(const std::string &base, const s
         return base + leaf;
     }
     return base + "/" + leaf;
-}
-
-std::string BedrockDiscordBridgePlugin::urlEncode(const std::string &value)
-{
-    std::ostringstream escaped;
-    escaped.fill('0');
-    escaped << std::hex;
-
-    for (const unsigned char ch : value) {
-        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~') {
-            escaped << static_cast<char>(ch);
-        }
-        else {
-            escaped << '%' << std::uppercase << std::setw(2) << static_cast<int>(ch) << std::nouppercase;
-        }
-    }
-
-    return escaped.str();
 }
 
 std::filesystem::path BedrockDiscordBridgePlugin::getConfigPath() const

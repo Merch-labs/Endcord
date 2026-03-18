@@ -197,19 +197,11 @@ private:
     static std::optional<WebhookTarget> parseWebhookUrl(const std::string &url);
     static std::optional<std::int64_t> parseRetryDelayMs(const std::string &value);
     static std::optional<std::int64_t> parseRetryDelayMsFromBody(const std::string &body);
-    static std::string applyTemplate(std::string value,
-                                     const std::vector<std::pair<std::string, std::string>> &replacements);
-    static std::string replaceAll(std::string value, const std::string &needle, const std::string &replacement);
     static std::string normalizeRoutePrefix(const std::string &value);
     static std::string normalizeSecret(std::string value);
     static bool isWildcardHost(const std::string &host);
     static bool isLoopbackAddress(const std::string &host);
-    static bool isAllowedRemoteAddress(const std::string &host, const std::vector<std::string> &allowed_patterns);
-    static std::optional<std::uint32_t> parseIpv4Address(const std::string &value);
-    static std::string normalizeAvatarMode(std::string value);
-    static std::string normalizeAvatarProvider(std::string value);
     static std::string joinUrl(const std::string &base, const std::string &leaf);
-    static std::string urlEncode(const std::string &value);
     static std::string messageToPlainText(const endstone::Message &message);
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(bedrock_discord_bridge LANGUAGES CXX)
+enable_testing()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,6 +41,13 @@ endif ()
 add_library(lodepng STATIC ${lodepng_SOURCE_DIR}/lodepng.cpp)
 target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
 
+add_library(bridge_support STATIC src/bridge_support.cpp)
+target_include_directories(bridge_support PUBLIC include)
+
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} PRIVATE httplib::httplib lodepng nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support httplib::httplib lodepng nlohmann_json::nlohmann_json)
+
+add_executable(bridge_support_tests tests/bridge_support_test.cpp)
+target_link_libraries(bridge_support_tests PRIVATE bridge_support)
+add_test(NAME bridge_support_tests COMMAND bridge_support_tests)

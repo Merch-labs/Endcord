@@ -34,6 +34,7 @@ Then configure and build with the checked-in preset:
 ```bash
 cmake --preset linux-clang-local-libcxx
 cmake --build --preset build-local
+ctest --test-dir build-local --output-on-failure
 ```
 
 To build a plugin binary that matches the official `endstone/endstone` Debian 12 Docker image and its `glibc 2.36`, use:
@@ -158,6 +159,12 @@ cp config.json.example config.json
 bedrock-discord-bridge-bot config.json
 ```
 
+Bot-only test command:
+
+```bash
+python3 -m unittest discover -s bot/tests
+```
+
 Bot config highlights:
 
 - `discord.relay_channel_ids` limits which Discord channels relay into Minecraft.
@@ -205,7 +212,9 @@ Bot config highlights:
 ## Release checklist
 
 1. Confirm the plugin still builds with `cmake --build --preset build-local`.
-2. Confirm the bot still installs and its sources compile with `python3 -m compileall bot/src`.
-3. Review `config/config.json.example`, `config/config.schema.json`, `plugins/endcord/bot/config.json`, and `bot/config.schema.json` for any new settings.
-4. Update [CHANGELOG.md](CHANGELOG.md) with release notes.
-5. Tag the release only after CI passes on `master`.
+2. Confirm the plugin support tests pass with `ctest --test-dir build-local --output-on-failure`.
+3. Confirm the bot still installs and its sources compile with `python3 -m compileall bot/src`.
+4. Confirm the bot config tests pass with `python3 -m unittest discover -s bot/tests`.
+5. Review `config/config.json.example`, `config/config.schema.json`, `plugins/endcord/bot/config.json`, and `bot/config.schema.json` for any new settings.
+6. Update [CHANGELOG.md](CHANGELOG.md) with release notes.
+7. Tag the release only after CI passes on `master`.
