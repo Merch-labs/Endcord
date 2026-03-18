@@ -26,6 +26,34 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+namespace {
+using ReplacementList = std::vector<std::pair<std::string, std::string>>;
+
+ReplacementList makePlayerTemplateReplacements(const endstone::Player &player, const std::string &payload,
+                                               const std::string &event_name, const std::string &server_name)
+{
+    const auto &skin = player.getSkin();
+    return {{"{player}", player.getName()},
+            {"{message}", payload},
+            {"{event_message}", payload},
+            {"{event}", event_name},
+            {"{skin_id}", skin.getId()},
+            {"{server}", server_name}};
+}
+
+ReplacementList makeInboundChatTemplateReplacements(const std::string &author, const std::string &content,
+                                                    const std::string &channel, const std::string &guild,
+                                                    const std::string &message_url, const std::string &server_name)
+{
+    return {{"{author}", author},
+            {"{content}", content},
+            {"{channel}", channel},
+            {"{guild}", guild},
+            {"{message_url}", message_url},
+            {"{server}", server_name}};
+}
+}  // namespace
+
 ENDSTONE_PLUGIN(/*name=*/"bedrock_discord_bridge",
                 /*version=*/"0.5.0",
                 /*main_class=*/BedrockDiscordBridgePlugin)
@@ -782,21 +810,9 @@ void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &pl
     }
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
-    const auto skin = player.getSkin();
-    auto username = applyTemplate(config_.discord.username_template,
-                                  {{"{player}", player.getName()},
-                                   {"{message}", message},
-                                   {"{event_message}", message},
-                                   {"{event}", "chat"},
-                                   {"{skin_id}", skin.getId()},
-                                   {"{server}", getServer().getName()}});
-    auto content = applyTemplate(config_.discord.content_template,
-                                 {{"{player}", player.getName()},
-                                  {"{message}", message},
-                                  {"{event_message}", message},
-                                  {"{event}", "chat"},
-                                  {"{skin_id}", skin.getId()},
-                                  {"{server}", getServer().getName()}});
+    const auto replacements = makePlayerTemplateReplacements(player, message, "chat", getServer().getName());
+    auto username = applyTemplate(config_.discord.username_template, replacements);
+    auto content = applyTemplate(config_.discord.content_template, replacements);
 
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
 }
@@ -814,21 +830,9 @@ void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::
         return;
     }
 
-    const auto skin = player.getSkin();
-    auto username = applyTemplate(config_.discord.system_username_template,
-                                  {{"{player}", player.getName()},
-                                   {"{message}", event_message},
-                                   {"{event_message}", event_message},
-                                   {"{event}", event_name},
-                                   {"{skin_id}", skin.getId()},
-                                   {"{server}", getServer().getName()}});
-    auto content = applyTemplate(content_template,
-                                 {{"{player}", player.getName()},
-                                  {"{message}", event_message},
-                                  {"{event_message}", event_message},
-                                  {"{event}", event_name},
-                                  {"{skin_id}", skin.getId()},
-                                  {"{server}", getServer().getName()}});
+    const auto replacements = makePlayerTemplateReplacements(player, event_message, event_name, getServer().getName());
+    auto username = applyTemplate(config_.discord.system_username_template, replacements);
+    auto content = applyTemplate(content_template, replacements);
 
     std::optional<std::string> avatar_url = std::nullopt;
     if (config_.discord.use_player_avatar_for_system_messages) {
@@ -1085,16 +1089,9 @@ void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req
     }
 
     content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
-    const auto formatted = replaceAll(
-        replaceAll(
-            replaceAll(
-                replaceAll(
-                    replaceAll(
-                        replaceAll(config_.bot_bridge.inbound_chat_template, "{author}", author), "{content}", content),
-                    "{channel}", channel),
-                "{guild}", guild),
-            "{message_url}", message_url),
-        "{server}", getServer().getName());
+    const auto formatted = applyTemplate(
+        config_.bot_bridge.inbound_chat_template,
+        makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, getServer().getName()));
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 

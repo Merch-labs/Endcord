@@ -381,15 +381,15 @@ class BedrockDiscordBridgeBot(discord.Client):
 
         relay_content = self._apply_template(
             self.config.relay.message_template,
-            {
-                "{author}": message.author.display_name,
-                "{content}": content,
-                "{attachments}": attachments_text,
-                "{jump_url}": jump_url_text,
-                "{channel}": message.channel.name,
-                "{guild}": message.guild.name,
-                "{message_url}": message.jump_url,
-            },
+            self._build_relay_replacements(
+                author=message.author.display_name,
+                content=content,
+                attachments=attachments_text,
+                jump_url=jump_url_text,
+                channel=message.channel.name,
+                guild=message.guild.name,
+                message_url=message.jump_url,
+            ),
         ).strip()
         if not relay_content:
             self._log_ignored_message(message, "formatted relay content is empty")
@@ -697,6 +697,27 @@ class BedrockDiscordBridgeBot(discord.Client):
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning("Failed to resolve channel %s: %s", channel_id, exc)
             return None
+
+    @staticmethod
+    def _build_relay_replacements(
+        *,
+        author: str,
+        content: str,
+        attachments: str,
+        jump_url: str,
+        channel: str,
+        guild: str,
+        message_url: str,
+    ) -> dict[str, str]:
+        return {
+            "{author}": author,
+            "{content}": content,
+            "{attachments}": attachments,
+            "{jump_url}": jump_url,
+            "{channel}": channel,
+            "{guild}": guild,
+            "{message_url}": message_url,
+        }
 
     @staticmethod
     def _apply_template(template: str, replacements: dict[str, str]) -> str:
