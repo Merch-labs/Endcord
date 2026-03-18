@@ -43,7 +43,7 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 - `plugin_bridge.base_url` should point at the plugin API root, usually `http://127.0.0.1:8089/bedrock-discord-bridge/api`.
 - `plugin_bridge.shared_secret` must match `bot_bridge.shared_secret` in the plugin config.
 - `discord.guild_id` can stay `0` and the bot will derive it from `discord.outbound_channel_id`, the first relay channel, or the system-message channel.
-- `discord.auto_create_webhook` lets the bot create or reuse a webhook in the outbound channel, then push that URL into the plugin automatically.
+- `discord.auto_create_webhook` lets the bot create or reuse a webhook in the outbound channel, then push that URL into the plugin automatically. Keep `discord.webhook_name` free of the word `Discord`, because Discord rejects it in webhook names.
 - `discord.outbound_channel_id` defaults to the first `discord.relay_channel_ids` entry when left at `0`.
 - `discord.relay_channel_ids` can be left empty only if you set `discord.outbound_channel_id` and do not want Discord-to-Minecraft chat relay.
 - `discord.sync_commands_globally` should usually stay `false` so command updates sync quickly to one guild.

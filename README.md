@@ -177,7 +177,7 @@ Bot config highlights:
 
 - `discord.relay_channel_ids` limits which Discord channels relay into Minecraft.
 - `discord.guild_id` can stay `0` if you want the bot to derive the guild from the first configured channel.
-- `discord.auto_create_webhook` and `plugin_bridge.configure_webhook_on_startup` are the easiest-distribution path: the bot creates or reuses the outbound webhook and injects it into the plugin automatically.
+- `discord.auto_create_webhook` and `plugin_bridge.configure_webhook_on_startup` are the easiest-distribution path: the bot creates or reuses the outbound webhook and injects it into the plugin automatically. Keep the configured webhook name free of the word `Discord`, because Discord rejects it in webhook names.
 - `discord.command_role_ids` and `discord.status_role_ids` control who can use slash commands.
 - `plugin_bridge.base_url` should match `http://127.0.0.1:<port><api_route_prefix>` or another allowlisted bridge address.
 - `plugin_bridge.request_max_retries`, `plugin_bridge.request_retry_base_seconds`, and `plugin_bridge.request_retry_max_seconds` control retry/backoff for safe bridge operations.

@@ -112,8 +112,8 @@ class BotConfig:
                 relay_to_game_enabled=bool(discord_cfg.get("relay_to_game_enabled", True)),
                 sync_commands_globally=bool(discord_cfg.get("sync_commands_globally", False)),
                 auto_create_webhook=bool(discord_cfg.get("auto_create_webhook", True)),
-                webhook_name=str(discord_cfg.get("webhook_name", "Bedrock Discord Bridge")).strip()
-                or "Bedrock Discord Bridge",
+                webhook_name=str(discord_cfg.get("webhook_name", "Bedrock Bridge")).strip()
+                or "Bedrock Bridge",
             ),
             plugin_bridge=PluginBridgeConfig(
                 base_url=str(plugin_cfg["base_url"]).rstrip("/"),
