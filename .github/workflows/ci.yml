@@ -78,7 +78,6 @@ jobs:
           name: endcord-bot-python
           path: |
             bot/dist/*
-            plugins/endcord/bot/config.json
             bot/config.schema.json
             bot/scripts/bootstrap-local-runtime.sh
             bot/scripts/run-local-runtime.sh
