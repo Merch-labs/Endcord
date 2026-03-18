@@ -6,5 +6,9 @@ build-debian12
 .deps
 bot/.venv
 bot/config.json
+bot/dist
+.vscode
+.idea
 __pycache__
 *.pyc
+*.log

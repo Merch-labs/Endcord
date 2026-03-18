@@ -10,3 +10,13 @@ __pycache__/
 .venv/
 bot/.venv/
 bot/config.json
+bot/dist/
+.vscode/
+.idea/
+*.code-workspace
+*.log
+*.swp
+*.swo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

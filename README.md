@@ -2,39 +2,268 @@
 
 Two-way Minecraft Bedrock <-> Discord bridge for Endstone.
 
-It ships as:
+This project gives you:
 
-- a Linux Endstone C++ plugin (`.so`)
-- a colocated companion Discord bot
+- a Linux Endstone plugin (`.so`)
+- a companion Discord bot
 - JSON config files for both sides
 
-The default setup is meant to feel simple:
+The normal setup is:
 
-1. build or download the plugin
-2. drop the `.so` into `plugins/`
-3. start the server once
-4. fill in the bot token, channel id, and shared secret
-5. run the bot in the same local runtime as Endstone
+1. put the plugin in your server `plugins/` folder
+2. start the server once
+3. paste in your bot token, channel id, and shared secret
+4. run the bot beside the server
 
-No Docker-specific setup, tunnel, proxy, or self-hosted avatar service is required for the normal path.
+You do not need Docker-specific setup, tunnels, proxies, or self-hosted avatar hosting for the default path.
 
-## What it does
+## If You Just Want It Working
 
-- Minecraft -> Discord relay via webhook with per-message `username` and `avatar_url`
-- Discord -> Minecraft relay through a secure local bot API
-- Provider-based Bedrock avatar support with `tabavatars`, `mcheads`, or a custom provider URL
-- Join, quit, and death relays with configurable templates
-- Slash commands:
+Use this path if you are not trying to build or customize anything deeply.
+
+### What you need
+
+- an Endstone Bedrock server on Linux
+- the plugin `.so`
+- a Discord bot token
+- a Discord channel id
+- a shared secret you choose
+
+### 1. Put the plugin in `plugins/`
+
+Copy:
+
+```text
+endstone_bedrock_discord_bridge.so
+```
+
+into:
+
+```text
+path/to/bedrock_server/plugins/
+```
+
+If you are building from source, the build section is near the bottom of this README.
+
+### 2. Start the server once
+
+On first load, the plugin creates:
+
+```text
+path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
+```
+
+### 3. Edit the plugin config
+
+You can start from:
+
+```bash
+cp config/config.json.example path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
+```
+
+The most important plugin settings are:
+
+- `bot_bridge.shared_secret`
+- `bot_bridge.allow_local_requests_only`
+- `avatar.provider`
+- `bot_bridge.inbound_chat_template`
+
+For most users:
+
+- leave `bot_bridge.allow_local_requests_only` as `true`
+- leave `avatar.provider` as `tabavatars`
+- leave `discord.allow_runtime_webhook_override` as `true`
+
+Plugin schema:
+- [config/config.schema.json](config/config.schema.json)
+
+### 4. Set up the bot config
+
+In the `bot/` folder:
+
+```bash
+cd bot
+./scripts/bootstrap-local-runtime.sh
+cp config.json.example /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
+```
+
+Then edit:
+
+- `discord.token`
+- `discord.relay_channel_ids`
+- `plugin_bridge.shared_secret`
+
+Usually you can leave these as-is:
+
+- `discord.guild_id = 0`
+- `discord.auto_create_webhook = true`
+- `plugin_bridge.configure_webhook_on_startup = true`
+- `plugin_bridge.base_url = http://127.0.0.1:8089/bedrock-discord-bridge/api`
+
+Bot schema:
+- [bot/config.schema.json](bot/config.schema.json)
+
+### 5. Run the bot
+
+Run the bot in the same local runtime environment as Endstone:
+
+```bash
+cd bot
+./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
+```
+
+For automatic startup, adapt:
+- [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
+
+### 6. What should happen
+
+Once both pieces are running:
+
+- Minecraft chat should appear in Discord
+- Discord messages from your configured channel should appear in Minecraft
+- player avatars should come from the configured avatar provider
+- the bot should auto-create or reuse the outbound webhook if allowed
+
+## What This Project Does
+
+- Minecraft -> Discord relay through a webhook
+- Discord -> Minecraft relay through a local bot API
+- per-message Discord `username` and `avatar_url` for Minecraft-originated messages
+- join, quit, and death relays
+- slash commands:
   - `/mcstatus`
   - `/mccommand`
   - `/mcreloadbridge`
-- Runtime webhook provisioning so the bot can create and inject the webhook automatically
 
-## Quick Start
+## Common Things People Change
 
-### 1. Build the plugin
+### Change how messages look
 
-For a normal local Linux build:
+Plugin-side formatting:
+
+- `discord.username_template`
+- `discord.content_template`
+- `discord.system_username_template`
+- `discord.join_content_template`
+- `discord.quit_content_template`
+- `discord.death_content_template`
+- `bot_bridge.inbound_chat_template`
+
+Bot-side formatting:
+
+- `relay.message_template`
+- `relay.attachment_template`
+- `relay.jump_url_template`
+
+### Change avatar provider
+
+Supported providers:
+
+- `tabavatars`
+- `mcheads`
+- `custom`
+
+Relevant plugin settings:
+
+- `avatar.provider`
+- `avatar.provider_url_template`
+- `avatar.provider_prefer_xuid`
+- `avatar.provider_render_type`
+- `avatar.provider_bedrock_username_prefix`
+- `avatar.size`
+
+### Turn relays on or off
+
+Plugin relay toggles:
+
+- `relay.minecraft_to_discord_enabled`
+- `relay.chat_enabled`
+- `relay.join_enabled`
+- `relay.quit_enabled`
+- `relay.death_enabled`
+
+Bot-side message filters:
+
+- `discord.relay_to_game_enabled`
+- `relay.ignore_bot_messages`
+- `relay.ignore_webhook_messages`
+
+### Bot presence and bot-owned system messages
+
+Presence:
+
+- `presence.enabled`
+- `presence.status`
+- `presence.activity_type`
+- `presence.activity_text`
+
+Optional bot-owned lifecycle delivery:
+
+- `system_messages.enabled`
+- `system_messages.channel_id`
+- `system_messages.message_template`
+
+## Troubleshooting
+
+### Minecraft -> Discord works, but Discord -> Minecraft does not
+
+Check:
+
+- the bot is running
+- `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`
+- `plugin_bridge.base_url` points at `127.0.0.1`
+- `discord.relay_channel_ids` contains the right channel
+
+### Avatars are not showing correctly
+
+Check:
+
+- `avatar.enabled` is `true`
+- `avatar.provider` is valid
+- the provider you chose can resolve that Bedrock player identity
+
+### The bot does not create the webhook
+
+Check:
+
+- `discord.auto_create_webhook = true`
+- `plugin_bridge.configure_webhook_on_startup = true`
+- the bot has permission to manage webhooks in the outbound channel
+- `discord.webhook_name` does not contain the word `Discord`
+
+## Recommended Runtime Model
+
+Keep the setup simple:
+
+- Endstone loads the plugin inside the Bedrock server process
+- the companion bot runs beside it in the same local runtime environment
+- the bot talks to the plugin over `http://127.0.0.1:<port>/bedrock-discord-bridge/api`
+
+That gives you:
+
+- one plugin
+- one bot
+- one shared secret
+- one local bridge URL
+
+## Optional Advanced Settings
+
+These are useful, but most people do not need to touch them on day one.
+
+- `queue.max_size`
+- `queue.max_attempts`
+- `queue.retry_delay_ms`
+- `bot_bridge.allowed_remote_addresses`
+- `plugin_bridge.request_max_retries`
+- `plugin_bridge.request_retry_base_seconds`
+- `plugin_bridge.request_retry_max_seconds`
+- `discord.command_role_ids`
+- `discord.status_role_ids`
+- `discord.outbound_channel_id`
+
+## Build From Source
+
+### Local Linux build
 
 ```bash
 ./scripts/setup-local-libcxx.sh
@@ -48,7 +277,9 @@ Expected artifact:
 build-local/endstone_bedrock_discord_bridge.so
 ```
 
-If you want a build that matches the official `endstone/endstone` Debian 12 container image:
+### Debian 12-compatible build
+
+If your runtime matches the official `endstone/endstone` Debian 12 image:
 
 ```bash
 ./scripts/build-plugin-debian12.sh
@@ -60,203 +291,16 @@ Artifact:
 build-debian12/endstone_bedrock_discord_bridge.so
 ```
 
-### 2. Install the plugin
+### Build notes
 
-Copy the plugin into your Bedrock server `plugins/` directory:
+- Endstone requires Clang on Linux
+- Endstone forces `-stdlib=libc++`
+- plain `g++` builds are expected to fail
+- current Endstone pin: `v0.11.2`
 
-```bash
-cp build-local/endstone_bedrock_discord_bridge.so path/to/bedrock_server/plugins/
-```
+## Developer Checks
 
-Or use the Debian 12 build if that matches your server runtime:
-
-```bash
-cp build-debian12/endstone_bedrock_discord_bridge.so path/to/bedrock_server/plugins/
-```
-
-### 3. Start the server once
-
-On first load, the plugin creates:
-
-```text
-path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
-```
-
-You can also pre-seed it from:
-
-```bash
-cp config/config.json.example path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
-```
-
-### 4. Set the plugin config
-
-For the normal setup, the most important fields are:
-
-- `bot_bridge.shared_secret`
-- `bot_bridge.allow_local_requests_only`
-- optional formatting changes such as `bot_bridge.inbound_chat_template`
-- optional avatar provider changes under `avatar`
-
-Plugin schema:
-- [config/config.schema.json](config/config.schema.json)
-
-### 5. Set up the bot
-
-```bash
-cd bot
-./scripts/bootstrap-local-runtime.sh
-cp config.json.example /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
-```
-
-Then fill in:
-
-- `discord.token`
-- `discord.relay_channel_ids`
-- `plugin_bridge.shared_secret`
-
-The default bot config can auto-derive the guild and auto-create the outbound webhook.
-
-Bot schema:
-- [bot/config.schema.json](bot/config.schema.json)
-
-### 6. Run the bot
-
-Run the bot in the same local runtime environment as Endstone so the bridge stays on `127.0.0.1`:
-
-```bash
-cd bot
-./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
-```
-
-For long-running installs, use:
-- [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
-
-## Normal Runtime Model
-
-The intended runtime model is:
-
-- Endstone loads the plugin inside the Bedrock server process
-- the companion bot runs beside it in the same local runtime environment
-- the bot talks to the plugin over `http://127.0.0.1:<port>/bedrock-discord-bridge/api`
-
-That keeps the product model simple:
-
-- one plugin
-- one bot
-- one shared secret
-- one local bridge URL
-
-## Config Basics
-
-### Plugin config
-
-Important plugin settings:
-
-- `discord.webhook_url`
-  - optional if the bot is allowed to provision the webhook at runtime
-- `discord.allow_runtime_webhook_override`
-  - lets the bot inject the webhook automatically
-- `relay.minecraft_to_discord_enabled`
-  - master outbound toggle
-- `relay.chat_enabled`
-- `relay.join_enabled`
-- `relay.quit_enabled`
-- `relay.death_enabled`
-- `avatar.enabled`
-- `avatar.provider`
-  - `tabavatars`, `mcheads`, or `custom`
-- `avatar.provider_url_template`
-  - used only when `provider = "custom"`
-- `bot_bridge.shared_secret`
-- `bot_bridge.allow_local_requests_only`
-- `bot_bridge.inbound_chat_template`
-
-Admin commands:
-
-- `/discordbridge status`
-- `/discordbridge reload`
-
-### Bot config
-
-Important bot settings:
-
-- `discord.token`
-- `discord.relay_channel_ids`
-- `discord.outbound_channel_id`
-  - optional if the first relay channel should also be used for outbound messages
-- `discord.auto_create_webhook`
-- `plugin_bridge.base_url`
-  - normally `http://127.0.0.1:8089/bedrock-discord-bridge/api`
-- `plugin_bridge.shared_secret`
-- `relay.message_template`
-- `presence.activity_text`
-
-## Avatar Providers
-
-The project now uses provider-based avatars only.
-
-Supported modes:
-
-- `tabavatars`
-- `mcheads`
-- `custom`
-
-Relevant settings:
-
-- `avatar.provider`
-- `avatar.provider_url_template`
-- `avatar.provider_prefer_xuid`
-- `avatar.provider_render_type`
-- `avatar.provider_bedrock_username_prefix`
-- `avatar.size`
-
-Practical provider flow:
-
-1. read Bedrock player identity such as gamertag, XUID, UUID, and skin id
-2. build a provider URL from the configured avatar provider
-3. send that URL as the Discord webhook `avatar_url`
-
-## Common Customization
-
-Useful formatting settings:
-
-- `discord.username_template`
-- `discord.content_template`
-- `discord.system_username_template`
-- `discord.join_content_template`
-- `discord.quit_content_template`
-- `discord.death_content_template`
-- `bot_bridge.inbound_chat_template`
-- `relay.message_template`
-- `relay.attachment_template`
-- `relay.jump_url_template`
-
-Useful behavior toggles:
-
-- `discord.allow_mentions`
-- `discord.use_player_avatar_for_system_messages`
-- `relay.ignore_bot_messages`
-- `relay.ignore_webhook_messages`
-- `system_messages.enabled`
-
-Useful reliability settings:
-
-- `queue.max_size`
-- `queue.max_attempts`
-- `queue.retry_delay_ms`
-- `plugin_bridge.request_max_retries`
-- `plugin_bridge.request_retry_base_seconds`
-- `plugin_bridge.request_retry_max_seconds`
-
-## Build Notes
-
-Endstone requires Clang on Linux and forces `-stdlib=libc++`, so plain `g++` builds are expected to fail.
-
-Current Endstone pin:
-
-- `v0.11.2`
-
-Local test/build commands:
+Run these from the repository root:
 
 ```bash
 cmake --preset linux-clang-local-libcxx
@@ -266,28 +310,14 @@ python3 -m unittest discover -s bot/tests
 python3 -m compileall bot/src
 ```
 
-## Recommended Architecture
+## Project Files
 
-Use a hybrid Discord setup:
-
-- webhook for Minecraft-originated outbound messages
-- bot connection for Discord-originated messages, slash commands, and webhook provisioning
-
-This keeps the best part of each path:
-
-- webhook gives per-message avatar/name overrides
-- bot gives Discord gateway features without bloating the plugin runtime
-
-## Project Layout
-
-- plugin build/config:
-  - [CMakeLists.txt](CMakeLists.txt)
-  - [config/config.json.example](config/config.json.example)
-  - [config/config.schema.json](config/config.schema.json)
-- bot:
-  - [bot/README.md](bot/README.md)
-  - [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json)
-  - [bot/config.schema.json](bot/config.schema.json)
+- plugin config example: [config/config.json.example](config/config.json.example)
+- plugin config schema: [config/config.schema.json](config/config.schema.json)
+- bot README: [bot/README.md](bot/README.md)
+- bot config example: [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json)
+- bot config schema: [bot/config.schema.json](bot/config.schema.json)
+- service example: [bot/systemd/bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
 
 ## Publishing
 

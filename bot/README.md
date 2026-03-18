@@ -38,7 +38,7 @@ Optional but common:
 - `discord.status_role_ids`
 
 Schema:
-- [config.schema.json](bot/config.schema.json)
+- [config.schema.json](config.schema.json)
 
 ## Most Important Settings
 
@@ -127,7 +127,7 @@ Optional bot-owned lifecycle delivery:
 
 If you want the bot to start automatically:
 
-- adapt [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
+- adapt [bedrock-discord-bridge-bot.service.example](systemd/bedrock-discord-bridge-bot.service.example)
 - enable it with `systemctl`
 
 ## Local Checks
