@@ -235,8 +235,8 @@ class EndcordBot(discord.Client):
         if not self.config.slash_commands.enabled:
             return
 
-        @self.tree.command(name="mcstatus", description="Show the current Endcord bridge status.")
-        async def mcstatus(interaction: discord.Interaction) -> None:
+        @self.tree.command(name="status", description="Show the current Endcord bridge status.")
+        async def status(interaction: discord.Interaction) -> None:
             if not self._is_authorized(interaction, self.config.discord.status_role_ids):
                 await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                 return
@@ -257,9 +257,9 @@ class EndcordBot(discord.Client):
             ]
             await interaction.followup.send("\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses)
 
-        @self.tree.command(name="mccommand", description="Execute a server command through the bridge.")
+        @self.tree.command(name="command", description="Execute a server command through the bridge.")
         @app_commands.describe(command="Command to execute without the leading slash.")
-        async def mccommand(interaction: discord.Interaction, command: str) -> None:
+        async def command(interaction: discord.Interaction, command: str) -> None:
             if not self._is_authorized(interaction, self.config.discord.command_role_ids):
                 await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                 return
@@ -286,8 +286,8 @@ class EndcordBot(discord.Client):
                 response_text = response_text[:1797] + "..."
             await interaction.followup.send(response_text, ephemeral=self.config.slash_commands.ephemeral_responses)
 
-        @self.tree.command(name="mcreloadbridge", description="Reload the Endcord plugin configuration.")
-        async def mcreloadbridge(interaction: discord.Interaction) -> None:
+        @self.tree.command(name="reloadbridge", description="Reload the Endcord plugin configuration.")
+        async def reloadbridge(interaction: discord.Interaction) -> None:
             if not self._is_authorized(interaction, self.config.discord.command_role_ids):
                 await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                 return

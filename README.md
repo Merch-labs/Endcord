@@ -131,9 +131,9 @@ Once both pieces are running:
 - per-message Discord `username` and `avatar_url` for Minecraft-originated messages
 - join, quit, and death relays
 - slash commands:
-  - `/mcstatus`
-  - `/mccommand`
-  - `/mcreloadbridge`
+  - `/status`
+  - `/command`
+  - `/reloadbridge`
 
 ## Common Things People Change
 

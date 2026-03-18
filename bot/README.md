@@ -77,9 +77,9 @@ Filtering:
 
 ## Slash Commands
 
-- `/mcstatus`
-- `/mccommand command:<text>`
-- `/mcreloadbridge`
+- `/status`
+- `/command command:<text>`
+- `/reloadbridge`
 
 Role restrictions:
 
