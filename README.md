@@ -83,8 +83,7 @@ In the `bot/` folder:
 
 ```bash
 cd bot
-./scripts/bootstrap-local-runtime.sh
-cp config.json.example /path/to/bedrock_server/plugins/endcord/bot/config.json
+./scripts/bootstrap-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
 Then edit:
@@ -335,7 +334,6 @@ python3 -m compileall bot/src
 - plugin config example: [config/config.json.example](config/config.json.example)
 - plugin config schema: [config/config.schema.json](config/config.schema.json)
 - bot README: [bot/README.md](bot/README.md)
-- bot config example: [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json)
 - bot config schema: [bot/config.schema.json](bot/config.schema.json)
 - service example: [bot/systemd/endcord-bot.service.example](bot/systemd/endcord-bot.service.example)
 

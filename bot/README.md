@@ -19,8 +19,7 @@ The normal runtime model is simple:
 
 ```bash
 cd bot
-./scripts/bootstrap-local-runtime.sh
-cp config.json.example /path/to/bedrock_server/plugins/endcord/bot/config.json
+./scripts/bootstrap-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
