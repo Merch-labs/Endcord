@@ -83,6 +83,11 @@ Filtering:
 
 Role restrictions:
 
+- `slash_commands.status.admin_only`
+- `slash_commands.players.admin_only`
+- `slash_commands.ping.admin_only`
+- `slash_commands.command.admin_only`
+- `slash_commands.configreload.admin_only`
 - `slash_commands.status.role_ids`
 - `slash_commands.players.role_ids`
 - `slash_commands.ping.role_ids`
@@ -101,6 +106,11 @@ Legacy fallback role lists still load if you already use them:
 
 - `discord.command_role_ids`
 - `discord.status_role_ids`
+
+Default policy:
+
+- `/players`, `/status`, and `/ping` are open by default
+- `/command` and `/configreload` are admin-only by default
 
 ## Presence
 

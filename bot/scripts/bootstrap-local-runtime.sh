@@ -55,22 +55,27 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
     "ephemeral_responses": true,
     "status": {
       "enabled": true,
+      "admin_only": false,
       "role_ids": []
     },
     "command": {
       "enabled": true,
+      "admin_only": true,
       "role_ids": []
     },
     "players": {
       "enabled": true,
+      "admin_only": false,
       "role_ids": []
     },
     "ping": {
       "enabled": true,
+      "admin_only": false,
       "role_ids": []
     },
     "configreload": {
       "enabled": true,
+      "admin_only": true,
       "role_ids": []
     }
   },

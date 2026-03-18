@@ -215,6 +215,11 @@ Bot slash command settings:
 - `slash_commands.ping.enabled`
 - `slash_commands.command.enabled`
 - `slash_commands.configreload.enabled`
+- `slash_commands.status.admin_only`
+- `slash_commands.players.admin_only`
+- `slash_commands.ping.admin_only`
+- `slash_commands.command.admin_only`
+- `slash_commands.configreload.admin_only`
 - `slash_commands.status.role_ids`
 - `slash_commands.players.role_ids`
 - `slash_commands.ping.role_ids`

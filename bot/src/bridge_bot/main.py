@@ -236,10 +236,26 @@ class EndcordBot(discord.Client):
         if not self.config.slash_commands.enabled:
             return
 
+        def register_slash_command(name: str, description: str, admin_only: bool):
+            def decorator(func):
+                if admin_only:
+                    func = app_commands.default_permissions(administrator=True)(func)
+                return self.tree.command(name=name, description=description)(func)
+
+            return decorator
+
         if self.config.slash_commands.status.enabled:
-            @self.tree.command(name="status", description="Show the current Endcord bridge status.")
+            @register_slash_command(
+                "status",
+                "Show the current Endcord bridge status.",
+                self.config.slash_commands.status.admin_only,
+            )
             async def status(interaction: discord.Interaction) -> None:
-                if not self._is_authorized(interaction, self.config.slash_commands.status.role_ids):
+                if not self._is_authorized(
+                    interaction,
+                    self.config.slash_commands.status.role_ids,
+                    admin_only=self.config.slash_commands.status.admin_only,
+                ):
                     await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                     return
 
@@ -262,9 +278,17 @@ class EndcordBot(discord.Client):
                 )
 
         if self.config.slash_commands.players.enabled:
-            @self.tree.command(name="players", description="Show the players currently online.")
+            @register_slash_command(
+                "players",
+                "Show the players currently online.",
+                self.config.slash_commands.players.admin_only,
+            )
             async def players(interaction: discord.Interaction) -> None:
-                if not self._is_authorized(interaction, self.config.slash_commands.players.role_ids):
+                if not self._is_authorized(
+                    interaction,
+                    self.config.slash_commands.players.role_ids,
+                    admin_only=self.config.slash_commands.players.admin_only,
+                ):
                     await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                     return
 
@@ -292,9 +316,17 @@ class EndcordBot(discord.Client):
                 )
 
         if self.config.slash_commands.ping.enabled:
-            @self.tree.command(name="ping", description="Check the Discord bot and bridge response time.")
+            @register_slash_command(
+                "ping",
+                "Check the Discord bot and bridge response time.",
+                self.config.slash_commands.ping.admin_only,
+            )
             async def ping(interaction: discord.Interaction) -> None:
-                if not self._is_authorized(interaction, self.config.slash_commands.ping.role_ids):
+                if not self._is_authorized(
+                    interaction,
+                    self.config.slash_commands.ping.role_ids,
+                    admin_only=self.config.slash_commands.ping.admin_only,
+                ):
                     await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                     return
 
@@ -318,10 +350,18 @@ class EndcordBot(discord.Client):
                 )
 
         if self.config.slash_commands.command.enabled:
-            @self.tree.command(name="command", description="Execute a server command through the bridge.")
+            @register_slash_command(
+                "command",
+                "Execute a server command through the bridge.",
+                self.config.slash_commands.command.admin_only,
+            )
             @app_commands.describe(command="Command to execute without the leading slash.")
             async def command(interaction: discord.Interaction, command: str) -> None:
-                if not self._is_authorized(interaction, self.config.slash_commands.command.role_ids):
+                if not self._is_authorized(
+                    interaction,
+                    self.config.slash_commands.command.role_ids,
+                    admin_only=self.config.slash_commands.command.admin_only,
+                ):
                     await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                     return
 
@@ -350,9 +390,17 @@ class EndcordBot(discord.Client):
                 )
 
         if self.config.slash_commands.configreload.enabled:
-            @self.tree.command(name="configreload", description="Reload the Endcord plugin configuration.")
+            @register_slash_command(
+                "configreload",
+                "Reload the Endcord plugin configuration.",
+                self.config.slash_commands.configreload.admin_only,
+            )
             async def configreload(interaction: discord.Interaction) -> None:
-                if not self._is_authorized(interaction, self.config.slash_commands.configreload.role_ids):
+                if not self._is_authorized(
+                    interaction,
+                    self.config.slash_commands.configreload.role_ids,
+                    admin_only=self.config.slash_commands.configreload.admin_only,
+                ):
                     await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
                     return
 
@@ -367,9 +415,11 @@ class EndcordBot(discord.Client):
                     "Bridge reload command sent.", ephemeral=self.config.slash_commands.ephemeral_responses
                 )
 
-    def _is_authorized(self, interaction: discord.Interaction, role_ids: list[int]) -> bool:
+    def _is_authorized(self, interaction: discord.Interaction, role_ids: list[int], *, admin_only: bool = False) -> bool:
         if interaction.user.guild_permissions.administrator:
             return True
+        if admin_only:
+            return False
         if not role_ids:
             return True
         user = interaction.user

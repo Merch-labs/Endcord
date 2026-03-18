@@ -327,10 +327,14 @@
       "additionalProperties": false,
       "required": [
         "enabled",
+        "admin_only",
         "role_ids"
       ],
       "properties": {
         "enabled": {
+          "type": "boolean"
+        },
+        "admin_only": {
           "type": "boolean"
         },
         "role_ids": {

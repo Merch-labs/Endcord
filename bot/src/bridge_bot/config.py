@@ -57,6 +57,7 @@ class SlashCommandConfig:
 @dataclass(slots=True)
 class SlashCommandRuleConfig:
     enabled: bool
+    admin_only: bool
     role_ids: list[int]
 
 
@@ -135,10 +136,19 @@ class BotConfig:
         logging_cfg = data.get("logging", {})
         system_cfg = data.get("system_messages", {})
 
+        default_admin_only = {
+            "status": False,
+            "players": False,
+            "ping": False,
+            "command": True,
+            "configreload": True,
+        }
+
         def build_command_rule(name: str, fallback_role_ids: list[int]) -> SlashCommandRuleConfig:
             command_cfg = slash_cfg.get(name, {})
             return SlashCommandRuleConfig(
                 enabled=bool(command_cfg.get("enabled", True)),
+                admin_only=bool(command_cfg.get("admin_only", default_admin_only[name])),
                 role_ids=[int(x) for x in command_cfg.get("role_ids", fallback_role_ids)],
             )
 
