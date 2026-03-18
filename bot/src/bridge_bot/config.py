@@ -112,8 +112,8 @@ class BotConfig:
                 relay_to_game_enabled=bool(discord_cfg.get("relay_to_game_enabled", True)),
                 sync_commands_globally=bool(discord_cfg.get("sync_commands_globally", False)),
                 auto_create_webhook=bool(discord_cfg.get("auto_create_webhook", True)),
-                webhook_name=str(discord_cfg.get("webhook_name", "Bedrock Bridge")).strip()
-                or "Bedrock Bridge",
+                webhook_name=str(discord_cfg.get("webhook_name", "Endcord")).strip()
+                or "Endcord",
             ),
             plugin_bridge=PluginBridgeConfig(
                 base_url=str(plugin_cfg["base_url"]).rstrip("/"),
@@ -144,7 +144,7 @@ class BotConfig:
                 status=str(presence_cfg.get("status", "online")).lower(),
                 activity_type=str(presence_cfg.get("activity_type", "watching")).lower(),
                 activity_text=str(presence_cfg.get("activity_text", "{server_name} | {online_players} online")),
-                fallback_text=str(presence_cfg.get("fallback_text", "Bridge online")),
+                fallback_text=str(presence_cfg.get("fallback_text", "Endcord online")),
                 streaming_url=str(presence_cfg.get("streaming_url", "")),
                 update_interval_seconds=max(int(presence_cfg.get("update_interval_seconds", 120)), 0),
             ),

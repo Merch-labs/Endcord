@@ -352,7 +352,7 @@ class EndcordBot(discord.Client):
             },
         ).strip()
         if not activity_text:
-            activity_text = self.config.presence.fallback_text or "Bridge online"
+            activity_text = self.config.presence.fallback_text or "Endcord online"
 
         await self.change_presence(
             status=self._discord_status(self.config.presence.status),
