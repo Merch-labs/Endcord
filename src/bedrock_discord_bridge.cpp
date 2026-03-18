@@ -1097,6 +1097,14 @@ void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::
         return;
     }
 
+    json online_player_names = json::array();
+    const auto online_players = getServer().getOnlinePlayers();
+    for (const auto *player : online_players) {
+        if (player != nullptr) {
+            online_player_names.push_back(player->getName());
+        }
+    }
+
     std::size_t queue_depth = 0;
     {
         std::lock_guard lock(queue_mutex_);
@@ -1113,7 +1121,8 @@ void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::
     res.set_content(json({{"ok", true},
                           {"server_name", getServer().getName()},
                           {"minecraft_version", getServer().getMinecraftVersion()},
-                          {"online_players", getServer().getOnlinePlayers().size()},
+                          {"online_players", online_players.size()},
+                          {"online_player_names", online_player_names},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"runtime_webhook_override_active", runtime_webhook_override_active_},
                           {"webhook_queue_depth", queue_depth},
