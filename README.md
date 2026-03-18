@@ -161,8 +161,11 @@ bedrock-discord-bridge-bot config.json
 Bot config highlights:
 
 - `discord.relay_channel_ids` limits which Discord channels relay into Minecraft.
+- `discord.guild_id` can stay `0` if you want the bot to derive the guild from the first configured channel.
+- `discord.auto_create_webhook` and `plugin_bridge.configure_webhook_on_startup` are the easiest-distribution path: the bot creates or reuses the outbound webhook and injects it into the plugin automatically.
 - `discord.command_role_ids` and `discord.status_role_ids` control who can use slash commands.
 - `plugin_bridge.base_url` should match `http://127.0.0.1:<port><api_route_prefix>` or another allowlisted bridge address.
+- `plugin_bridge.request_max_retries`, `plugin_bridge.request_retry_base_seconds`, and `plugin_bridge.request_retry_max_seconds` control retry/backoff for safe bridge operations.
 - `relay.message_template`, `relay.attachment_template`, `relay.jump_url_template`, and `relay.join_separator` control how Discord messages are projected into Minecraft before the plugin wraps them with `bot_bridge.inbound_chat_template`.
 - `relay.ignore_bot_messages` and `relay.ignore_webhook_messages` let you decide whether other automation can talk back into Minecraft.
 - `presence.activity_text` supports `{server_name}`, `{minecraft_version}`, `{online_players}`, `{webhook_queue_depth}`, and `{guild_name}`.
@@ -174,10 +177,11 @@ Bot config highlights:
 
 1. Build the plugin with `cmake --preset linux-clang-local-libcxx` and `cmake --build --preset build-local`.
 2. Copy `build-local/endstone_bedrock_discord_bridge.so` into your Bedrock server `plugins/` directory.
-3. Copy [config/config.json.example](config/config.json.example) to the plugin data folder as `config.json` and fill in the webhook plus bot bridge settings.
+3. Copy [config/config.json.example](config/config.json.example) to the plugin data folder as `config.json` and fill in the bot bridge settings. A manual webhook URL is optional if the bot is allowed to auto-create one.
 4. Start the server once so the plugin creates its data directories and avatar cache path.
 5. Set up the companion bot from [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json), making sure `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`.
-6. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled.
+6. Fill in `discord.token` and at least one channel id. The default bot config can auto-derive the guild and auto-create the webhook.
+7. Run the bot on the same host while `bot_bridge.allow_local_requests_only` is enabled.
 
 ## Implemented scope
 

@@ -22,8 +22,9 @@ cp config.json.example config.json
 Fill in:
 
 - `discord.token`
-- `discord.guild_id`
 - `discord.relay_channel_ids`
+- optionally `discord.guild_id` if you do not want it auto-derived from the first configured channel
+- optionally `discord.outbound_channel_id` if Minecraft-to-Discord should use a different channel from inbound relay
 - `discord.command_role_ids` if you want to restrict remote command usage
 - `discord.status_role_ids` if you want to restrict `/mcstatus`
 - `plugin_bridge.base_url`
@@ -41,8 +42,13 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 
 - `plugin_bridge.base_url` should point at the plugin API root, usually `http://127.0.0.1:8089/bedrock-discord-bridge/api`.
 - `plugin_bridge.shared_secret` must match `bot_bridge.shared_secret` in the plugin config.
-- `discord.relay_channel_ids` can be left empty to allow all text channels in the configured guild.
+- `discord.guild_id` can stay `0` and the bot will derive it from `discord.outbound_channel_id`, the first relay channel, or the system-message channel.
+- `discord.auto_create_webhook` lets the bot create or reuse a webhook in the outbound channel, then push that URL into the plugin automatically.
+- `discord.outbound_channel_id` defaults to the first `discord.relay_channel_ids` entry when left at `0`.
+- `discord.relay_channel_ids` can be left empty only if you set `discord.outbound_channel_id` and do not want Discord-to-Minecraft chat relay.
 - `discord.sync_commands_globally` should usually stay `false` so command updates sync quickly to one guild.
+- `plugin_bridge.configure_webhook_on_startup` is the easiest-distribution path: the bot provisions the webhook for the plugin so server owners do not need to paste a webhook URL by hand.
+- `plugin_bridge.request_max_retries`, `plugin_bridge.request_retry_base_seconds`, and `plugin_bridge.request_retry_max_seconds` tune retry/backoff for idempotent bridge calls such as status checks, webhook binding, and draining queued system messages.
 - `relay.message_template` supports `{author}`, `{content}`, `{attachments}`, `{jump_url}`, `{channel}`, `{guild}`, and `{message_url}` so you can decide exactly what the plugin receives.
 - `relay.attachment_template` supports `{filename}`, `{url}`, and `{content_type}`.
 - `relay.include_attachment_urls` and `relay.include_jump_url` decide whether those placeholders get populated.
@@ -52,6 +58,7 @@ Schema for editor validation is included at [config.schema.json](bot/config.sche
 - `logging.level`, `logging.log_ignored_messages`, `logging.log_relay_successes`, and `logging.log_presence_updates` tune runtime verbosity.
 - `system_messages.enabled` turns on bot-owned join/quit/death delivery from the plugin queue.
 - `system_messages.channel_id` can target a dedicated channel, or you can leave it at `0` to fall back to the first `discord.relay_channel_ids` entry.
+- `system_messages.failure_backoff_seconds` and `system_messages.max_backoff_seconds` keep the bot from hammering the plugin during restart windows.
 - `system_messages.message_template` supports `{content}`, `{event}`, and `{player_name}`.
 - `slash_commands.ephemeral_responses` controls whether command replies stay visible only to the caller.
 

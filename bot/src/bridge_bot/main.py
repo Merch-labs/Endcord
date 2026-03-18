@@ -21,10 +21,13 @@ class DiscordConfig:
     token: str
     guild_id: int
     relay_channel_ids: list[int]
+    outbound_channel_id: int
     command_role_ids: list[int]
     status_role_ids: list[int]
     relay_to_game_enabled: bool
     sync_commands_globally: bool
+    auto_create_webhook: bool
+    webhook_name: str
 
 
 @dataclass(slots=True)
@@ -32,6 +35,10 @@ class PluginBridgeConfig:
     base_url: str
     shared_secret: str
     request_timeout_seconds: int
+    configure_webhook_on_startup: bool
+    request_max_retries: int
+    request_retry_base_seconds: float
+    request_retry_max_seconds: float
 
 
 @dataclass(slots=True)
@@ -77,6 +84,8 @@ class SystemMessageConfig:
     enabled: bool
     channel_id: int
     poll_interval_seconds: int
+    failure_backoff_seconds: int
+    max_backoff_seconds: int
     message_template: str
     max_messages_per_poll: int
 
@@ -108,15 +117,23 @@ class BotConfig:
                 token=discord_cfg["token"],
                 guild_id=int(discord_cfg["guild_id"]),
                 relay_channel_ids=[int(x) for x in discord_cfg.get("relay_channel_ids", [])],
+                outbound_channel_id=int(discord_cfg.get("outbound_channel_id", 0)),
                 command_role_ids=[int(x) for x in discord_cfg.get("command_role_ids", [])],
                 status_role_ids=[int(x) for x in discord_cfg.get("status_role_ids", [])],
                 relay_to_game_enabled=bool(discord_cfg.get("relay_to_game_enabled", True)),
                 sync_commands_globally=bool(discord_cfg.get("sync_commands_globally", False)),
+                auto_create_webhook=bool(discord_cfg.get("auto_create_webhook", True)),
+                webhook_name=str(discord_cfg.get("webhook_name", "Bedrock Discord Bridge")).strip() or
+                "Bedrock Discord Bridge",
             ),
             plugin_bridge=PluginBridgeConfig(
                 base_url=str(plugin_cfg["base_url"]).rstrip("/"),
                 shared_secret=str(plugin_cfg["shared_secret"]).strip(),
                 request_timeout_seconds=max(int(plugin_cfg.get("request_timeout_seconds", 10)), 1),
+                configure_webhook_on_startup=bool(plugin_cfg.get("configure_webhook_on_startup", True)),
+                request_max_retries=max(int(plugin_cfg.get("request_max_retries", 3)), 0),
+                request_retry_base_seconds=max(float(plugin_cfg.get("request_retry_base_seconds", 1.5)), 0.1),
+                request_retry_max_seconds=max(float(plugin_cfg.get("request_retry_max_seconds", 15.0)), 0.1),
             ),
             relay=RelayConfig(
                 include_attachment_urls=bool(relay_cfg.get("include_attachment_urls", True)),
@@ -152,6 +169,8 @@ class BotConfig:
                 enabled=bool(system_cfg.get("enabled", False)),
                 channel_id=int(system_cfg.get("channel_id", 0)),
                 poll_interval_seconds=max(int(system_cfg.get("poll_interval_seconds", 2)), 1),
+                failure_backoff_seconds=max(int(system_cfg.get("failure_backoff_seconds", 5)), 1),
+                max_backoff_seconds=max(int(system_cfg.get("max_backoff_seconds", 60)), 1),
                 message_template=str(system_cfg.get("message_template", "{content}")),
                 max_messages_per_poll=max(int(system_cfg.get("max_messages_per_poll", 20)), 1),
             ),
@@ -159,8 +178,10 @@ class BotConfig:
 
         if not config.discord.token or config.discord.token == "replace-me":
             raise ValueError("discord.token must be configured")
-        if config.discord.guild_id <= 0:
-            raise ValueError("discord.guild_id must be configured")
+        if config.discord.guild_id < 0:
+            raise ValueError("discord.guild_id must be 0 or a positive guild id")
+        if not config.discord.relay_channel_ids and config.discord.outbound_channel_id <= 0:
+            raise ValueError("configure at least one discord.relay_channel_ids entry or discord.outbound_channel_id")
         if not config.plugin_bridge.base_url.startswith(("http://", "https://")):
             raise ValueError("plugin_bridge.base_url must start with http:// or https://")
         if not config.plugin_bridge.shared_secret or config.plugin_bridge.shared_secret == "change-me":
@@ -206,36 +227,62 @@ class PluginBridgeClient:
         return await self._request("POST", "/command", {"actor_name": actor_name, "command": command})
 
     async def get_status(self) -> dict[str, Any]:
-        return await self._request("GET", "/status", None)
+        return await self._request("GET", "/status", None, retryable=True)
 
     async def drain_system_messages(self) -> list[dict[str, Any]]:
-        data = await self._request("POST", "/system-messages/drain", {})
+        data = await self._request("POST", "/system-messages/drain", {}, retryable=True)
         messages = data.get("messages", [])
         if not isinstance(messages, list):
             raise RuntimeError("bridge returned invalid system message payload")
         return [message for message in messages if isinstance(message, dict)]
 
-    async def _request(self, method: str, suffix: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+    async def configure_webhook(self, webhook_url: str) -> dict[str, Any]:
+        return await self._request("POST", "/webhook", {"webhook_url": webhook_url}, retryable=True)
+
+    async def _request(
+        self,
+        method: str,
+        suffix: str,
+        payload: dict[str, Any] | None,
+        *,
+        retryable: bool = False,
+    ) -> dict[str, Any]:
         url = f"{self._config.plugin_bridge.base_url}{suffix}"
         headers = {
             "Authorization": f"Bearer {self._config.plugin_bridge.shared_secret}",
             "Content-Type": "application/json",
         }
-        async with self._session.request(method, url, headers=headers, json=payload) as response:
-            text = await response.text()
-            if not text:
-                raise RuntimeError(f"bridge returned empty response with HTTP {response.status}")
+        attempts = self._config.plugin_bridge.request_max_retries + 1 if retryable else 1
+        delay = self._config.plugin_bridge.request_retry_base_seconds
+        last_error: Exception | None = None
 
+        for attempt in range(1, attempts + 1):
             try:
-                data = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(f"bridge returned invalid JSON with HTTP {response.status}: {text}") from exc
+                async with self._session.request(method, url, headers=headers, json=payload) as response:
+                    text = await response.text()
+                    if not text:
+                        raise RuntimeError(f"bridge returned empty response with HTTP {response.status}")
 
-            if response.status >= 400 or not data.get("ok", False):
-                error = data.get("error", f"HTTP {response.status}")
-                raise RuntimeError(str(error))
+                    try:
+                        data = json.loads(text)
+                    except json.JSONDecodeError as exc:
+                        raise RuntimeError(f"bridge returned invalid JSON with HTTP {response.status}: {text}") from exc
 
-            return data
+                    if response.status >= 400 or not data.get("ok", False):
+                        error = data.get("error", f"HTTP {response.status}")
+                        raise RuntimeError(str(error))
+
+                    return data
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt >= attempts:
+                    break
+                await asyncio.sleep(delay)
+                delay = min(delay * 2.0, self._config.plugin_bridge.request_retry_max_seconds)
+
+        raise RuntimeError(str(last_error) if last_error is not None else "bridge request failed")
 
 
 class BedrockDiscordBridgeBot(discord.Client):
@@ -251,6 +298,7 @@ class BedrockDiscordBridgeBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self._presence_task: asyncio.Task[None] | None = None
         self._system_message_task: asyncio.Task[None] | None = None
+        self._commands_synced = False
         self._register_commands()
 
     async def close(self) -> None:
@@ -270,18 +318,16 @@ class BedrockDiscordBridgeBot(discord.Client):
         await super().close()
 
     async def setup_hook(self) -> None:
-        guild_object = discord.Object(id=self.config.discord.guild_id)
-        if self.config.slash_commands.enabled:
-            if self.config.discord.sync_commands_globally:
-                await self.tree.sync()
-                LOGGER.info("Synced slash commands globally.")
-            else:
-                self.tree.copy_global_to(guild=guild_object)
-                await self.tree.sync(guild=guild_object)
-                LOGGER.info("Synced slash commands to guild %s.", self.config.discord.guild_id)
+        if self.config.slash_commands.enabled and self.config.discord.sync_commands_globally:
+            await self.tree.sync()
+            self._commands_synced = True
+            LOGGER.info("Synced slash commands globally.")
 
     async def on_ready(self) -> None:
         LOGGER.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "unknown"))
+        await self._ensure_runtime_context()
+        await self._ensure_webhook_binding()
+        await self._sync_commands_if_needed()
         if self.config.presence.enabled and (self._presence_task is None or self._presence_task.done()):
             self._presence_task = asyncio.create_task(self._presence_loop())
         if self.config.system_messages.enabled and (
@@ -298,7 +344,10 @@ class BedrockDiscordBridgeBot(discord.Client):
         if self.config.relay.ignore_webhook_messages and message.webhook_id is not None:
             self._log_ignored_message(message, "message came from a webhook")
             return
-        if message.guild is None or message.guild.id != self.config.discord.guild_id:
+        if message.guild is None:
+            self._log_ignored_message(message, "message is outside the configured guild")
+            return
+        if self.config.discord.guild_id > 0 and message.guild.id != self.config.discord.guild_id:
             self._log_ignored_message(message, "message is outside the configured guild")
             return
         if self.config.discord.relay_channel_ids and message.channel.id not in self.config.discord.relay_channel_ids:
@@ -462,6 +511,9 @@ class BedrockDiscordBridgeBot(discord.Client):
 
         try:
             status_payload = await self.bridge.get_status()
+            if self.config.plugin_bridge.configure_webhook_on_startup and not status_payload.get("webhook_configured", False):
+                await self._ensure_webhook_binding()
+                status_payload = await self.bridge.get_status()
             template_text = self.config.presence.activity_text
         except Exception as exc:  # noqa: BLE001
             if self.config.logging.log_presence_updates:
@@ -517,15 +569,19 @@ class BedrockDiscordBridgeBot(discord.Client):
             LOGGER.debug("Ignoring Discord message %s: %s.", message.id, reason)
 
     async def _system_message_loop(self) -> None:
+        delay = self.config.system_messages.poll_interval_seconds
         while not self.is_closed():
             try:
                 await self._drain_and_send_system_messages()
+                delay = self.config.system_messages.poll_interval_seconds
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 LOGGER.warning("Failed to relay queued system messages: %s", exc)
+                delay = min(max(delay * 2, self.config.system_messages.failure_backoff_seconds),
+                            self.config.system_messages.max_backoff_seconds)
 
-            await asyncio.sleep(self.config.system_messages.poll_interval_seconds)
+            await asyncio.sleep(delay)
 
     async def _drain_and_send_system_messages(self) -> None:
         channel = await self._resolve_system_channel()
@@ -556,14 +612,91 @@ class BedrockDiscordBridgeBot(discord.Client):
             LOGGER.warning("System message relay is enabled but no channel_id is configured.")
             return None
 
-        channel = self.get_channel(channel_id)
+        return await self._resolve_channel(channel_id)
+
+    async def _sync_commands_if_needed(self) -> None:
+        if self._commands_synced or not self.config.slash_commands.enabled or self.config.discord.sync_commands_globally:
+            return
+        if self.config.discord.guild_id <= 0:
+            LOGGER.warning("Skipping guild slash-command sync because discord.guild_id is not resolved yet.")
+            return
+
+        guild_object = discord.Object(id=self.config.discord.guild_id)
+        self.tree.copy_global_to(guild=guild_object)
+        await self.tree.sync(guild=guild_object)
+        self._commands_synced = True
+        LOGGER.info("Synced slash commands to guild %s.", self.config.discord.guild_id)
+
+    async def _ensure_runtime_context(self) -> None:
+        if self.config.discord.guild_id > 0:
+            return
+
+        channel_id = self.config.discord.outbound_channel_id
+        if channel_id <= 0 and self.config.discord.relay_channel_ids:
+            channel_id = self.config.discord.relay_channel_ids[0]
+        if channel_id <= 0 and self.config.system_messages.channel_id > 0:
+            channel_id = self.config.system_messages.channel_id
+        if channel_id <= 0:
+            return
+
+        channel = await self._resolve_channel(channel_id)
+        if channel is None or getattr(channel, "guild", None) is None:
+            return
+
+        self.config.discord.guild_id = channel.guild.id
+        LOGGER.info("Derived discord.guild_id=%s from channel %s.", self.config.discord.guild_id, channel_id)
+
+    async def _ensure_webhook_binding(self) -> None:
+        if not self.config.plugin_bridge.configure_webhook_on_startup or not self.config.discord.auto_create_webhook:
+            return
+
+        channel_id = self.config.discord.outbound_channel_id
+        if channel_id <= 0 and self.config.discord.relay_channel_ids:
+            channel_id = self.config.discord.relay_channel_ids[0]
+        if channel_id <= 0:
+            LOGGER.warning("Skipping webhook provisioning because no outbound Discord channel is configured.")
+            return
+
+        channel = await self._resolve_channel(channel_id)
         if channel is None:
+            return
+        if not isinstance(channel, discord.TextChannel):
+            LOGGER.warning("Configured outbound channel %s does not support webhooks.", channel_id)
+            return
+
+        try:
+            webhooks = await channel.webhooks()
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to list channel webhooks for %s: %s", channel_id, exc)
+            return
+
+        webhook = next((hook for hook in webhooks if hook.name == self.config.discord.webhook_name and hook.token), None)
+        if webhook is None:
             try:
-                channel = await self.fetch_channel(channel_id)
+                webhook = await channel.create_webhook(name=self.config.discord.webhook_name, reason="Bedrock Discord Bridge setup")
+                LOGGER.info("Created webhook '%s' in #%s.", self.config.discord.webhook_name, channel.name)
             except Exception as exc:  # noqa: BLE001
-                LOGGER.warning("Failed to resolve system message channel %s: %s", channel_id, exc)
-                return None
-        return channel
+                LOGGER.warning("Failed to create webhook in #%s: %s", channel.name, exc)
+                return
+
+        try:
+            await self.bridge.configure_webhook(webhook.url)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to push webhook configuration into the plugin bridge: %s", exc)
+            return
+
+        if self.config.logging.log_relay_successes:
+            LOGGER.info("Configured plugin webhook target from channel #%s.", channel.name)
+
+    async def _resolve_channel(self, channel_id: int):
+        channel = self.get_channel(channel_id)
+        if channel is not None:
+            return channel
+        try:
+            return await self.fetch_channel(channel_id)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to resolve channel %s: %s", channel_id, exc)
+            return None
 
     @staticmethod
     def _apply_template(template: str, replacements: dict[str, str]) -> str:
