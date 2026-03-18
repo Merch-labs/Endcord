@@ -1,6 +1,6 @@
 # Bedrock Discord Bridge
 
-Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecraft Bedrock bridge with JSON configuration, per-player webhook identity, Bedrock-aware avatar providers, optional self-hosted skin-head rendering, and a secure local bot API.
+Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecraft Bedrock bridge with JSON configuration, per-player webhook identity, Bedrock-aware avatar providers, optional advanced self-hosted skin-head rendering, and a secure local bot API.
 
 ## What is included
 
@@ -14,7 +14,7 @@ Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecra
 - Local avatar cache under the plugin data folder
 - Built-in HTTP server for serving avatar PNGs
 - Secure local bot bridge API for Discord-to-Minecraft relay and remote command execution
-- JSON config with nested sections for Discord, relay toggles, logging, queue, avatar hosting, and bot bridge settings
+- JSON config with nested sections for Discord, relay toggles, logging, queue, avatar options, and bot bridge settings
 - Companion Discord bot with its own JSON config and slash commands
 - Customizable bot presence plus configurable Discord-to-Minecraft message formatting
 - `/discordbridge status` and `/discordbridge reload`
@@ -104,7 +104,9 @@ Config notes:
 
 ## Avatar hosting
 
-For easy distribution, the default mode is `avatar.mode = "provider"`. That avoids extra containers and gives Bedrock players avatars immediately by using a public provider that understands Bedrock XUIDs and gamertags.
+For easy distribution, the default mode is `avatar.mode = "provider"`. That avoids extra infrastructure and gives Bedrock players avatars immediately by using a public provider that understands Bedrock XUIDs and gamertags.
+
+Tunnels and proxy containers are not part of the recommended setup for this project. If you choose `avatar.mode = "rendered"`, all Discord needs is a stable public URL for the generated PNGs.
 
 If you want self-hosted avatars instead, Discord webhook `avatar_url` must still be a URL Discord can fetch. In rendered mode the plugin generates and caches PNGs locally, then maps them to:
 
@@ -115,11 +117,17 @@ If you want self-hosted avatars instead, Discord webhook `avatar_url` must still
 Practical self-hosted path:
 
 1. Enable `avatar.http_server`.
-2. Expose its route publicly through a reverse proxy or direct port forward.
+2. Expose its route through any stable public HTTP or HTTPS URL you control.
 3. Set `avatar.http_server.public_base_url` to the public URL for that route.
 4. Let the plugin render and reuse cached head icons by skin hash.
 
-This keeps the default install simple while still leaving a fully self-hosted path available for advanced deployments.
+Examples of acceptable rendered-mode hosting:
+
+- your own domain plus reverse proxy
+- a public host and port you already expose
+- any other stable public URL you control
+
+This keeps the default install simple while still leaving a self-hosted fallback available for advanced deployments.
 
 ## Recommended Discord architecture
 
