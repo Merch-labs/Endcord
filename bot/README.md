@@ -75,5 +75,4 @@ Run the bot in the same local runtime environment as the Endstone server so the 
 
 - Bootstrap the venv and local editable install with [bootstrap-local-runtime.sh](bot/scripts/bootstrap-local-runtime.sh).
 - Start it with [run-local-runtime.sh](bot/scripts/run-local-runtime.sh).
-- The older [bootstrap-host.sh](bot/scripts/bootstrap-host.sh) and [run-host.sh](bot/scripts/run-host.sh) names are kept as compatibility wrappers.
 - If you want it to start automatically on boot, adapt [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example) for your install path and enable it with `systemctl`.

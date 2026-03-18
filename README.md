@@ -89,7 +89,7 @@ Config notes:
 - `bot_bridge.enabled` turns on the local HTTP API used by the companion Discord bot.
 - `bot_bridge.shared_secret` must match the bot config exactly.
 - `bot_bridge.api_route_prefix` must line up with the bot's `plugin_bridge.base_url`.
-- `bot_bridge.allow_local_requests_only` should usually stay `true`, and `bot_bridge.allowed_remote_addresses` lets you trust a Docker bridge subnet without opening the API broadly.
+- `bot_bridge.allow_local_requests_only` should usually stay `true`, and `bot_bridge.allowed_remote_addresses` is only for advanced cases where the bot cannot stay on the same local runtime path.
 - `bot_bridge.outbound_system_messages_enabled` moves join/quit/death delivery to the companion bot so those lifecycle posts come from the bot identity instead of the webhook identity.
 - `bot_bridge.outbound_system_message_max_batch` controls how many queued lifecycle events the bot can drain per poll.
 - `bot_bridge.outbound_system_message_queue_max_size` bounds that queue so a restart loop cannot grow memory indefinitely.

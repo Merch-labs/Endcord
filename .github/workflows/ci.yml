@@ -82,6 +82,4 @@ jobs:
             bot/config.schema.json
             bot/scripts/bootstrap-local-runtime.sh
             bot/scripts/run-local-runtime.sh
-            bot/scripts/bootstrap-host.sh
-            bot/scripts/run-host.sh
             bot/systemd/bedrock-discord-bridge-bot.service.example
