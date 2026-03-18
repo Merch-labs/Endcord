@@ -1,6 +1,6 @@
-# Bedrock Discord Bridge Bot
+# Endcord Bot
 
-Companion Discord bot for the Endstone Bedrock Discord Bridge plugin.
+Companion Discord bot for the Endstone Endcord plugin.
 
 This bot is responsible for:
 
@@ -20,8 +20,8 @@ The normal runtime model is simple:
 ```bash
 cd bot
 ./scripts/bootstrap-local-runtime.sh
-cp config.json.example /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
-./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
+cp config.json.example /path/to/bedrock_server/plugins/endcord/bot/config.json
+./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
 Before running, fill in:
@@ -43,7 +43,7 @@ Schema:
 ## Most Important Settings
 
 - `plugin_bridge.base_url`
-  - usually `http://127.0.0.1:8089/bedrock-discord-bridge/api`
+  - usually `http://127.0.0.1:8089/endcord/api`
 - `plugin_bridge.shared_secret`
   - must match `bot_bridge.shared_secret` in the plugin config
 - `discord.auto_create_webhook`
@@ -127,7 +127,7 @@ Optional bot-owned lifecycle delivery:
 
 If you want the bot to start automatically:
 
-- adapt [bedrock-discord-bridge-bot.service.example](systemd/bedrock-discord-bridge-bot.service.example)
+- adapt [endcord-bot.service.example](systemd/endcord-bot.service.example)
 - enable it with `systemctl`
 
 ## Local Checks
@@ -135,5 +135,5 @@ If you want the bot to start automatically:
 ```bash
 python3 -m unittest discover -s bot/tests
 python3 -m compileall bot/src
-bedrock-discord-bridge-bot --help
+endcord-bot --help
 ```

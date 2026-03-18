@@ -14,7 +14,7 @@ from discord import app_commands
 from bridge_bot.config import BotConfig
 
 
-LOGGER = logging.getLogger("bedrock_discord_bridge_bot")
+LOGGER = logging.getLogger("endcord_bot")
 
 
 class PluginBridgeClient:
@@ -106,7 +106,7 @@ class PluginBridgeClient:
         raise RuntimeError(str(last_error) if last_error is not None else "bridge request failed")
 
 
-class BedrockDiscordBridgeBot(discord.Client):
+class EndcordBot(discord.Client):
     def __init__(self, config: BotConfig) -> None:
         intents = discord.Intents.default()
         intents.guilds = True
@@ -235,7 +235,7 @@ class BedrockDiscordBridgeBot(discord.Client):
         if not self.config.slash_commands.enabled:
             return
 
-        @self.tree.command(name="mcstatus", description="Show the current Bedrock Discord bridge status.")
+        @self.tree.command(name="mcstatus", description="Show the current Endcord bridge status.")
         async def mcstatus(interaction: discord.Interaction) -> None:
             if not self._is_authorized(interaction, self.config.discord.status_role_ids):
                 await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
@@ -286,7 +286,7 @@ class BedrockDiscordBridgeBot(discord.Client):
                 response_text = response_text[:1797] + "..."
             await interaction.followup.send(response_text, ephemeral=self.config.slash_commands.ephemeral_responses)
 
-        @self.tree.command(name="mcreloadbridge", description="Reload the Endstone bridge plugin configuration.")
+        @self.tree.command(name="mcreloadbridge", description="Reload the Endcord plugin configuration.")
         async def mcreloadbridge(interaction: discord.Interaction) -> None:
             if not self._is_authorized(interaction, self.config.discord.command_role_ids):
                 await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
@@ -294,7 +294,7 @@ class BedrockDiscordBridgeBot(discord.Client):
 
             await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
             try:
-                await self.bridge.post_command(actor_name=interaction.user.display_name, command="discordbridge reload")
+                await self.bridge.post_command(actor_name=interaction.user.display_name, command="endcord reload")
             except Exception as exc:  # noqa: BLE001
                 await interaction.followup.send(f"Reload failed: {exc}", ephemeral=True)
                 return
@@ -494,7 +494,7 @@ class BedrockDiscordBridgeBot(discord.Client):
         webhook = next((hook for hook in webhooks if hook.name == self.config.discord.webhook_name and hook.token), None)
         if webhook is None:
             try:
-                webhook = await channel.create_webhook(name=self.config.discord.webhook_name, reason="Bedrock Discord Bridge setup")
+                webhook = await channel.create_webhook(name=self.config.discord.webhook_name, reason="Endcord setup")
                 LOGGER.info("Created webhook '%s' in #%s.", self.config.discord.webhook_name, channel.name)
             except Exception as exc:  # noqa: BLE001
                 LOGGER.warning("Failed to create webhook in #%s: %s", channel.name, exc)
@@ -549,7 +549,7 @@ class BedrockDiscordBridgeBot(discord.Client):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Bedrock Discord Bridge companion bot.")
+    parser = argparse.ArgumentParser(description="Run the Endcord companion bot.")
     parser.add_argument("config", nargs="?", default="config.json", help="Path to the bot JSON config file.")
     return parser.parse_args()
 
@@ -563,7 +563,7 @@ async def async_main() -> None:
         format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
     )
 
-    client = BedrockDiscordBridgeBot(config)
+    client = EndcordBot(config)
     await client.start(config.discord.token)
 
 

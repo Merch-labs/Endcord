@@ -35,7 +35,7 @@ class BotConfigTests(unittest.TestCase):
                         "webhook_name": "Bridge",
                     },
                     "plugin_bridge": {
-                        "base_url": "http://127.0.0.1:8089/bedrock-discord-bridge/api",
+                        "base_url": "http://127.0.0.1:8089/endcord/api",
                         "shared_secret": "secret",
                         "request_timeout_seconds": 10,
                         "configure_webhook_on_startup": True,
@@ -73,7 +73,7 @@ class BotConfigTests(unittest.TestCase):
                     "webhook_name": "Bridge",
                 },
                 "plugin_bridge": {
-                    "base_url": "http://127.0.0.1:8089/bedrock-discord-bridge/api",
+                    "base_url": "http://127.0.0.1:8089/endcord/api",
                     "shared_secret": "secret",
                     "request_timeout_seconds": 10,
                     "configure_webhook_on_startup": True,
@@ -103,7 +103,7 @@ class BotConfigTests(unittest.TestCase):
                     "webhook_name": "Bridge",
                 },
                 "plugin_bridge": {
-                    "base_url": "http://127.0.0.1:8089/bedrock-discord-bridge/api",
+                    "base_url": "http://127.0.0.1:8089/endcord/api",
                     "shared_secret": "secret",
                     "request_timeout_seconds": 10,
                     "configure_webhook_on_startup": True,

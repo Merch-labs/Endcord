@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to Bedrock Discord Bridge.
+Thanks for contributing to Endcord.
 
 ## Local development
 

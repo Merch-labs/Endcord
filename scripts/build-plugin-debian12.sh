@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_TAG="bedrock-discord-bridge-build:debian12"
+IMAGE_TAG="endcord-build:debian12"
 
 docker build -f "${ROOT_DIR}/docker/Dockerfile.debian12-build" -t "${IMAGE_TAG}" "${ROOT_DIR}"
 
@@ -20,4 +20,4 @@ docker run --rm \
   '
 
 echo "Built Debian 12 compatible plugin at:"
-echo "  ${ROOT_DIR}/build-debian12/endstone_bedrock_discord_bridge.so"
+echo "  ${ROOT_DIR}/build-debian12/endstone_endcord.so"

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bedrock-discord-bridge.local/plugin-config.schema.json",
-  "title": "Bedrock Discord Bridge Plugin Config",
+  "$id": "https://endcord.local/plugin-config.schema.json",
+  "title": "Endcord Plugin Config",
   "type": "object",
   "additionalProperties": false,
   "required": [

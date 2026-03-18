@@ -34,14 +34,14 @@ jobs:
         run: cmake --build --preset build-local
 
       - name: Verify plugin artifact
-        run: test -f build-local/endstone_bedrock_discord_bridge.so
+        run: test -f build-local/endstone_endcord.so
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: endstone-bedrock-discord-bridge-linux
+          name: endstone-endcord-linux
           path: |
-            build-local/endstone_bedrock_discord_bridge.so
+            build-local/endstone_endcord.so
             config/config.json.example
             config/config.schema.json
 
@@ -70,16 +70,16 @@ jobs:
         run: python -m compileall bot/src
 
       - name: Verify bot CLI
-        run: bedrock-discord-bridge-bot --help
+        run: endcord-bot --help
 
       - name: Upload bot artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bedrock-discord-bridge-bot-python
+          name: endcord-bot-python
           path: |
             bot/dist/*
             plugins/endcord/bot/config.json
             bot/config.schema.json
             bot/scripts/bootstrap-local-runtime.sh
             bot/scripts/run-local-runtime.sh
-            bot/systemd/bedrock-discord-bridge-bot.service.example
+            bot/systemd/endcord-bot.service.example

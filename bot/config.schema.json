@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bedrock-discord-bridge.local/bot-config.schema.json",
-  "title": "Bedrock Discord Bridge Bot Config",
+  "$id": "https://endcord.local/bot-config.schema.json",
+  "title": "Endcord Bot Config",
   "type": "object",
   "additionalProperties": false,
   "required": [

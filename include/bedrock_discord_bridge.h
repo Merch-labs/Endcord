@@ -23,9 +23,9 @@ class Server;
 class Client;
 }
 
-class BedrockDiscordBridgePlugin : public endstone::Plugin {
+class EndcordPlugin : public endstone::Plugin {
 public:
-    ~BedrockDiscordBridgePlugin() override;
+    ~EndcordPlugin() override;
 
     void onLoad() override;
     void onEnable() override;
@@ -84,7 +84,7 @@ private:
     struct BotBridgeOptions {
         bool enabled = true;
         std::string shared_secret;
-        std::string api_route_prefix = "/bedrock-discord-bridge/api";
+        std::string api_route_prefix = "/endcord/api";
         bool allow_local_requests_only = true;
         std::vector<std::string> allowed_remote_addresses{};
         bool inbound_chat_enabled = true;
@@ -106,7 +106,7 @@ private:
     };
 
     struct BridgeConfig {
-        int config_version = 6;
+        int config_version = 7;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};

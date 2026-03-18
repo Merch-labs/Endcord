@@ -1,4 +1,4 @@
-# Bedrock Discord Bridge
+# Endcord
 
 Two-way Minecraft Bedrock <-> Discord bridge for Endstone.
 
@@ -34,7 +34,7 @@ Use this path if you are not trying to build or customize anything deeply.
 Copy:
 
 ```text
-endstone_bedrock_discord_bridge.so
+endstone_endcord.so
 ```
 
 into:
@@ -50,7 +50,7 @@ If you are building from source, the build section is near the bottom of this RE
 On first load, the plugin creates:
 
 ```text
-path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
+path/to/bedrock_server/plugins/endcord/config.json
 ```
 
 ### 3. Edit the plugin config
@@ -58,7 +58,7 @@ path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
 You can start from:
 
 ```bash
-cp config/config.json.example path/to/bedrock_server/plugins/bedrock_discord_bridge/config.json
+cp config/config.json.example path/to/bedrock_server/plugins/endcord/config.json
 ```
 
 The most important plugin settings are:
@@ -84,7 +84,7 @@ In the `bot/` folder:
 ```bash
 cd bot
 ./scripts/bootstrap-local-runtime.sh
-cp config.json.example /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
+cp config.json.example /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
 Then edit:
@@ -98,7 +98,7 @@ Usually you can leave these as-is:
 - `discord.guild_id = 0`
 - `discord.auto_create_webhook = true`
 - `plugin_bridge.configure_webhook_on_startup = true`
-- `plugin_bridge.base_url = http://127.0.0.1:8089/bedrock-discord-bridge/api`
+- `plugin_bridge.base_url = http://127.0.0.1:8089/endcord/api`
 
 Bot schema:
 - [bot/config.schema.json](bot/config.schema.json)
@@ -109,11 +109,11 @@ Run the bot in the same local runtime environment as Endstone:
 
 ```bash
 cd bot
-./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/bedrock_discord_bridge/bot/config.json
+./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
 For automatic startup, adapt:
-- [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
+- [endcord-bot.service.example](bot/systemd/endcord-bot.service.example)
 
 ### 6. What should happen
 
@@ -237,7 +237,7 @@ Keep the setup simple:
 
 - Endstone loads the plugin inside the Bedrock server process
 - the companion bot runs beside it in the same local runtime environment
-- the bot talks to the plugin over `http://127.0.0.1:<port>/bedrock-discord-bridge/api`
+- the bot talks to the plugin over `http://127.0.0.1:<port>/endcord/api`
 
 That gives you:
 
@@ -274,7 +274,7 @@ cmake --build --preset build-local
 Expected artifact:
 
 ```text
-build-local/endstone_bedrock_discord_bridge.so
+build-local/endstone_endcord.so
 ```
 
 ### Debian 12-compatible build
@@ -288,7 +288,7 @@ If your runtime matches the official `endstone/endstone` Debian 12 image:
 Artifact:
 
 ```text
-build-debian12/endstone_bedrock_discord_bridge.so
+build-debian12/endstone_endcord.so
 ```
 
 ### Build notes
@@ -317,7 +317,7 @@ python3 -m compileall bot/src
 - bot README: [bot/README.md](bot/README.md)
 - bot config example: [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json)
 - bot config schema: [bot/config.schema.json](bot/config.schema.json)
-- service example: [bot/systemd/bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example)
+- service example: [bot/systemd/endcord-bot.service.example](bot/systemd/endcord-bot.service.example)
 
 ## Publishing
 

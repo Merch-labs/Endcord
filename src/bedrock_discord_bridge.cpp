@@ -55,76 +55,75 @@ ReplacementList makeInboundChatTemplateReplacements(const std::string &author, c
 }
 }  // namespace
 
-ENDSTONE_PLUGIN(/*name=*/"bedrock_discord_bridge",
+ENDSTONE_PLUGIN(/*name=*/"endcord",
                 /*version=*/"0.6.0",
-                /*main_class=*/BedrockDiscordBridgePlugin)
+                /*main_class=*/EndcordPlugin)
 {
-    prefix = "BedrockDiscordBridge";
+    prefix = "Endcord";
     description = "Endstone C++ Bedrock-to-Discord bridge with JSON config, webhook queue, and provider-based avatars.";
-    authors = {"Bedrock Discord Bridge contributors"};
+    authors = {"Endcord contributors"};
 
-    command("discordbridge")
-        .description("Inspect or reload the Bedrock Discord bridge.")
-        .usages("/discordbridge status", "/discordbridge reload")
-        .aliases("dbbridge")
-        .permissions("bedrock_discord_bridge.command.status", "bedrock_discord_bridge.command.reload");
+    command("endcord")
+        .description("Inspect or reload Endcord.")
+        .usages("/endcord status", "/endcord reload")
+        .permissions("endcord.command.status", "endcord.command.reload");
 
-    permission("bedrock_discord_bridge.command")
-        .description("Allows use of all Bedrock Discord bridge commands.")
-        .children("bedrock_discord_bridge.command.status", true)
-        .children("bedrock_discord_bridge.command.reload", true);
+    permission("endcord.command")
+        .description("Allows use of all Endcord commands.")
+        .children("endcord.command.status", true)
+        .children("endcord.command.reload", true);
 
-    permission("bedrock_discord_bridge.command.status")
-        .description("Allows viewing Bedrock Discord bridge status.")
+    permission("endcord.command.status")
+        .description("Allows viewing Endcord status.")
         .default_(endstone::PermissionDefault::Operator);
 
-    permission("bedrock_discord_bridge.command.reload")
-        .description("Allows reloading Bedrock Discord bridge configuration.")
+    permission("endcord.command.reload")
+        .description("Allows reloading Endcord configuration.")
         .default_(endstone::PermissionDefault::Operator);
 }
 
-BedrockDiscordBridgePlugin::~BedrockDiscordBridgePlugin()
+EndcordPlugin::~EndcordPlugin()
 {
     stopBridgeServer();
     stopWorker();
 }
 
-void BedrockDiscordBridgePlugin::onLoad()
+void EndcordPlugin::onLoad()
 {
     getLogger().info("Loading plugin.");
 }
 
-void BedrockDiscordBridgePlugin::onEnable()
+void EndcordPlugin::onEnable()
 {
     ensureDataFolder();
     writeDefaultConfigIfMissing();
     loadConfig();
-    registerEvent(&BedrockDiscordBridgePlugin::onPlayerChat, *this);
-    registerEvent(&BedrockDiscordBridgePlugin::onPlayerJoin, *this);
-    registerEvent(&BedrockDiscordBridgePlugin::onPlayerQuit, *this);
-    registerEvent(&BedrockDiscordBridgePlugin::onPlayerDeath, *this);
+    registerEvent(&EndcordPlugin::onPlayerChat, *this);
+    registerEvent(&EndcordPlugin::onPlayerJoin, *this);
+    registerEvent(&EndcordPlugin::onPlayerQuit, *this);
+    registerEvent(&EndcordPlugin::onPlayerDeath, *this);
     restartRuntime();
 
     getLogger().info("Plugin enabled. Chat forwarding pipeline is active.");
 }
 
-void BedrockDiscordBridgePlugin::onDisable()
+void EndcordPlugin::onDisable()
 {
     stopBridgeServer();
     stopWorker();
     getLogger().info("Plugin disabled.");
 }
 
-bool BedrockDiscordBridgePlugin::onCommand(endstone::CommandSender &sender, const endstone::Command &command,
-                                           const std::vector<std::string> &args)
+bool EndcordPlugin::onCommand(endstone::CommandSender &sender, const endstone::Command &command,
+                              const std::vector<std::string> &args)
 {
-    if (command.getName() != "discordbridge") {
+    if (command.getName() != "endcord") {
         return false;
     }
 
     const auto subcommand = args.empty() ? std::string("status") : args[0];
     if (subcommand == "status") {
-        if (!sender.hasPermission("bedrock_discord_bridge.command.status")) {
+        if (!sender.hasPermission("endcord.command.status")) {
             sender.sendErrorMessage("You do not have permission to view bridge status.");
             return true;
         }
@@ -134,7 +133,7 @@ bool BedrockDiscordBridgePlugin::onCommand(endstone::CommandSender &sender, cons
     }
 
     if (subcommand == "reload") {
-        if (!sender.hasPermission("bedrock_discord_bridge.command.reload")) {
+        if (!sender.hasPermission("endcord.command.reload")) {
             sender.sendErrorMessage("You do not have permission to reload bridge configuration.");
             return true;
         }
@@ -144,15 +143,15 @@ bool BedrockDiscordBridgePlugin::onCommand(endstone::CommandSender &sender, cons
         clearQueue();
         loadConfig();
         restartRuntime();
-        sender.sendMessage("Bedrock Discord bridge configuration reloaded from '{}'.", getConfigPath().string());
+        sender.sendMessage("Endcord configuration reloaded from '{}'.", getConfigPath().string());
         return true;
     }
 
-    sender.sendErrorMessage("Usage: /discordbridge <status|reload>");
+    sender.sendErrorMessage("Usage: /endcord <status|reload>");
     return true;
 }
 
-void BedrockDiscordBridgePlugin::onPlayerChat(endstone::PlayerChatEvent &event)
+void EndcordPlugin::onPlayerChat(endstone::PlayerChatEvent &event)
 {
     if (event.isCancelled()) {
         return;
@@ -161,7 +160,7 @@ void BedrockDiscordBridgePlugin::onPlayerChat(endstone::PlayerChatEvent &event)
     forwardChatToDiscord(event.getPlayer(), event.getMessage());
 }
 
-void BedrockDiscordBridgePlugin::onPlayerJoin(endstone::PlayerJoinEvent &event)
+void EndcordPlugin::onPlayerJoin(endstone::PlayerJoinEvent &event)
 {
     if (!config_.relay.join_enabled) {
         if (config_.logging.log_filtered_events) {
@@ -175,7 +174,7 @@ void BedrockDiscordBridgePlugin::onPlayerJoin(endstone::PlayerJoinEvent &event)
     forwardLifecycleEventToDiscord(event.getPlayer(), "join", config_.discord.join_content_template, join_message);
 }
 
-void BedrockDiscordBridgePlugin::onPlayerQuit(endstone::PlayerQuitEvent &event)
+void EndcordPlugin::onPlayerQuit(endstone::PlayerQuitEvent &event)
 {
     if (!config_.relay.quit_enabled) {
         if (config_.logging.log_filtered_events) {
@@ -189,7 +188,7 @@ void BedrockDiscordBridgePlugin::onPlayerQuit(endstone::PlayerQuitEvent &event)
     forwardLifecycleEventToDiscord(event.getPlayer(), "quit", config_.discord.quit_content_template, quit_message);
 }
 
-void BedrockDiscordBridgePlugin::onPlayerDeath(endstone::PlayerDeathEvent &event)
+void EndcordPlugin::onPlayerDeath(endstone::PlayerDeathEvent &event)
 {
     if (!config_.relay.death_enabled) {
         if (config_.logging.log_filtered_events) {
@@ -203,7 +202,7 @@ void BedrockDiscordBridgePlugin::onPlayerDeath(endstone::PlayerDeathEvent &event
     forwardLifecycleEventToDiscord(event.getPlayer(), "death", config_.discord.death_content_template, death_message);
 }
 
-void BedrockDiscordBridgePlugin::ensureDataFolder() const
+void EndcordPlugin::ensureDataFolder() const
 {
     std::error_code ec;
     fs::create_directories(getDataFolder(), ec);
@@ -212,7 +211,7 @@ void BedrockDiscordBridgePlugin::ensureDataFolder() const
     }
 }
 
-void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
+void EndcordPlugin::writeDefaultConfigIfMissing() const
 {
     const auto config_path = getConfigPath();
     if (fs::exists(config_path)) {
@@ -220,7 +219,7 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
     }
 
     json root = {
-        {"config_version", 5},
+        {"config_version", 7},
         {"enabled", true},
         {"discord",
          {{"webhook_url", ""},
@@ -259,7 +258,7 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
         {"bot_bridge",
          {{"enabled", true},
           {"shared_secret", "change-me"},
-          {"api_route_prefix", "/bedrock-discord-bridge/api"},
+          {"api_route_prefix", "/endcord/api"},
           {"allow_local_requests_only", true},
           {"allowed_remote_addresses", json::array()},
           {"inbound_chat_enabled", true},
@@ -283,7 +282,7 @@ void BedrockDiscordBridgePlugin::writeDefaultConfigIfMissing() const
     getLogger().info("Wrote default config to '{}'.", config_path.string());
 }
 
-void BedrockDiscordBridgePlugin::loadConfig()
+void EndcordPlugin::loadConfig()
 {
     config_ = {};
     webhook_target_.reset();
@@ -506,7 +505,7 @@ void BedrockDiscordBridgePlugin::loadConfig()
     config_.avatar.size = std::clamp(config_.avatar.size, 8, 512);
     config_.avatar.provider = bridge_support::normalizeAvatarProvider(config_.avatar.provider);
     config_.bot_bridge.api_route_prefix =
-        normalizeRoutePrefix(config_.bot_bridge.api_route_prefix.empty() ? "/bedrock-discord-bridge/api"
+        normalizeRoutePrefix(config_.bot_bridge.api_route_prefix.empty() ? "/endcord/api"
                                                                          : config_.bot_bridge.api_route_prefix);
     config_.bot_bridge.shared_secret = normalizeSecret(config_.bot_bridge.shared_secret);
     config_.bot_bridge.inbound_chat_max_length = std::clamp(config_.bot_bridge.inbound_chat_max_length, 1, 4000);
@@ -541,7 +540,7 @@ void BedrockDiscordBridgePlugin::loadConfig()
     getLogger().info("Loaded config version {} from '{}'.", config_.config_version, config_path.string());
 }
 
-void BedrockDiscordBridgePlugin::restartRuntime()
+void EndcordPlugin::restartRuntime()
 {
     clearQueue();
 
@@ -554,7 +553,7 @@ void BedrockDiscordBridgePlugin::restartRuntime()
     startWorker();
 }
 
-void BedrockDiscordBridgePlugin::clearQueue()
+void EndcordPlugin::clearQueue()
 {
     {
         std::lock_guard lock(queue_mutex_);
@@ -568,7 +567,7 @@ void BedrockDiscordBridgePlugin::clearQueue()
     }
 }
 
-void BedrockDiscordBridgePlugin::startWorker()
+void EndcordPlugin::startWorker()
 {
     stopWorker();
     webhook_client_.reset();
@@ -595,15 +594,15 @@ void BedrockDiscordBridgePlugin::startWorker()
     webhook_client_->set_write_timeout(std::chrono::milliseconds(config_.queue.write_timeout_ms));
     webhook_client_->set_follow_location(true);
     webhook_client_->set_keep_alive(true);
-    webhook_client_->set_default_headers({{"User-Agent", "bedrock_discord_bridge/0.5.0"}});
+    webhook_client_->set_default_headers({{"User-Agent", "endcord/0.6.0"}});
 
     stop_worker_ = false;
     next_request_at_ = std::chrono::steady_clock::now();
-    worker_thread_ = std::thread(&BedrockDiscordBridgePlugin::workerLoop, this);
+    worker_thread_ = std::thread(&EndcordPlugin::workerLoop, this);
     getLogger().info("Webhook worker started.");
 }
 
-void BedrockDiscordBridgePlugin::stopWorker()
+void EndcordPlugin::stopWorker()
 {
     {
         std::lock_guard lock(queue_mutex_);
@@ -618,7 +617,7 @@ void BedrockDiscordBridgePlugin::stopWorker()
     webhook_client_.reset();
 }
 
-void BedrockDiscordBridgePlugin::startBridgeServer()
+void EndcordPlugin::startBridgeServer()
 {
     stopBridgeServer();
 
@@ -655,7 +654,7 @@ void BedrockDiscordBridgePlugin::startBridgeServer()
     getLogger().info("Bridge HTTP server starting on {}:{}.", host, port);
 }
 
-void BedrockDiscordBridgePlugin::stopBridgeServer()
+void EndcordPlugin::stopBridgeServer()
 {
     if (bridge_server_) {
         bridge_server_->stop();
@@ -668,7 +667,7 @@ void BedrockDiscordBridgePlugin::stopBridgeServer()
     bridge_server_.reset();
 }
 
-void BedrockDiscordBridgePlugin::workerLoop()
+void EndcordPlugin::workerLoop()
 {
     while (true) {
         WebhookJob job;
@@ -702,7 +701,7 @@ void BedrockDiscordBridgePlugin::workerLoop()
     }
 }
 
-void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &player, const std::string &message)
+void EndcordPlugin::forwardChatToDiscord(const endstone::Player &player, const std::string &message)
 {
     if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled) {
         if (config_.logging.log_filtered_events) {
@@ -727,10 +726,9 @@ void BedrockDiscordBridgePlugin::forwardChatToDiscord(const endstone::Player &pl
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
 }
 
-void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::Player &player,
-                                                                const std::string &event_name,
-                                                                const std::string &content_template,
-                                                                const std::string &event_message)
+void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &player, const std::string &event_name,
+                                                   const std::string &content_template,
+                                                   const std::string &event_message)
 {
     if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled) {
         if (config_.logging.log_filtered_events) {
@@ -757,9 +755,8 @@ void BedrockDiscordBridgePlugin::forwardLifecycleEventToDiscord(const endstone::
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
 }
 
-void BedrockDiscordBridgePlugin::enqueueDiscordMessage(const std::string &source_name, std::string username,
-                                                       std::string content,
-                                                       const std::optional<std::string> &avatar_url)
+void EndcordPlugin::enqueueDiscordMessage(const std::string &source_name, std::string username, std::string content,
+                                          const std::optional<std::string> &avatar_url)
 {
     if (username.empty()) {
         username = source_name;
@@ -803,8 +800,7 @@ void BedrockDiscordBridgePlugin::enqueueDiscordMessage(const std::string &source
     enqueueWebhookPayload({source_name, payload.str(), 0});
 }
 
-void BedrockDiscordBridgePlugin::enqueueBotSystemMessage(std::string event_name, std::string player_name,
-                                                         std::string content)
+void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string player_name, std::string content)
 {
     if (content.empty()) {
         if (config_.logging.log_filtered_events) {
@@ -824,7 +820,7 @@ void BedrockDiscordBridgePlugin::enqueueBotSystemMessage(std::string event_name,
         {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, 2000)});
 }
 
-void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) const
+void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
 {
     std::size_t queue_depth = 0;
     {
@@ -856,7 +852,7 @@ void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) con
     sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
 }
 
-void BedrockDiscordBridgePlugin::enqueueWebhookPayload(WebhookJob job)
+void EndcordPlugin::enqueueWebhookPayload(WebhookJob job)
 {
     std::lock_guard lock(queue_mutex_);
 
@@ -870,7 +866,7 @@ void BedrockDiscordBridgePlugin::enqueueWebhookPayload(WebhookJob job)
     queue_cv_.notify_one();
 }
 
-void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
+void EndcordPlugin::processWebhookJob(WebhookJob job)
 {
     if (!webhook_target_ || !webhook_client_) {
         return;
@@ -935,7 +931,7 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
     getLogger().warning("Discord webhook rejected payload for '{}' with status {}.", job.player_name, result->status);
 }
 
-void BedrockDiscordBridgePlugin::installBotBridgeRoutes()
+void EndcordPlugin::installBotBridgeRoutes()
 {
     if (!bridge_server_ || !config_.bot_bridge.enabled) {
         return;
@@ -959,7 +955,7 @@ void BedrockDiscordBridgePlugin::installBotBridgeRoutes()
                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeHealth(req, res); });
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Response &res)
+void EndcordPlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeRequest(req, res)) {
         return;
@@ -1020,7 +1016,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeChat(const httplib::Request &req
                     "application/json");
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res)
+void EndcordPlugin::handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeRequest(req, res)) {
         return;
@@ -1095,7 +1091,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeCommand(const httplib::Request &
                     "application/json");
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res)
+void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeRequest(req, res)) {
         return;
@@ -1133,8 +1129,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeStatus(const httplib::Request &r
                     "application/json");
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeDrainSystemMessages(const httplib::Request &req,
-                                                                    httplib::Response &res)
+void EndcordPlugin::handleBotBridgeDrainSystemMessages(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeRequest(req, res)) {
         return;
@@ -1164,7 +1159,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeDrainSystemMessages(const httpli
     res.set_content(json({{"ok", true}, {"messages", messages}}).dump(), "application/json");
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res)
+void EndcordPlugin::handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeRequest(req, res)) {
         return;
@@ -1210,7 +1205,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeConfigureWebhook(const httplib::
                     "application/json");
 }
 
-void BedrockDiscordBridgePlugin::handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res)
+void EndcordPlugin::handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res)
 {
     if (!isAuthorizedBotBridgeHealthRequest(req)) {
         res.status = 403;
@@ -1235,7 +1230,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeHealth(const httplib::Request &r
                     "application/json");
 }
 
-bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const
+bool EndcordPlugin::isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const
 {
     if (!config_.bot_bridge.enabled) {
         res.status = 403;
@@ -1284,13 +1279,13 @@ bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeRequest(const httplib::Req
     return true;
 }
 
-bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const
+bool EndcordPlugin::isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const
 {
     return isLoopbackAddress(req.remote_addr) ||
            bridge_support::isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
 }
 
-void BedrockDiscordBridgePlugin::loadWebhookState()
+void EndcordPlugin::loadWebhookState()
 {
     const auto state_path = getWebhookStatePath();
     if (!fs::exists(state_path)) {
@@ -1323,7 +1318,7 @@ void BedrockDiscordBridgePlugin::loadWebhookState()
     }
 }
 
-void BedrockDiscordBridgePlugin::persistWebhookState() const
+void EndcordPlugin::persistWebhookState() const
 {
     if (!runtime_webhook_override_active_ || !webhook_target_.has_value()) {
         return;
@@ -1347,7 +1342,7 @@ void BedrockDiscordBridgePlugin::persistWebhookState() const
     output << json({{"webhook_url", webhook_target_->origin + webhook_target_->path}}).dump(2) << '\n';
 }
 
-void BedrockDiscordBridgePlugin::clearWebhookState() const
+void EndcordPlugin::clearWebhookState() const
 {
     std::error_code ec;
     fs::remove(getWebhookStatePath(), ec);
@@ -1357,7 +1352,7 @@ void BedrockDiscordBridgePlugin::clearWebhookState() const
     }
 }
 
-std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(const endstone::Player &player)
+std::optional<std::string> EndcordPlugin::getOrCreateAvatarUrl(const endstone::Player &player)
 {
     if (!config_.avatar.enabled) {
         return std::nullopt;
@@ -1365,7 +1360,7 @@ std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(cons
     return buildProviderAvatarUrl(player);
 }
 
-std::optional<std::string> BedrockDiscordBridgePlugin::buildProviderAvatarUrl(const endstone::Player &player) const
+std::optional<std::string> EndcordPlugin::buildProviderAvatarUrl(const endstone::Player &player) const
 {
     const auto xuid = player.getXuid();
     const auto username = player.getName();
@@ -1393,8 +1388,8 @@ std::optional<std::string> BedrockDiscordBridgePlugin::buildProviderAvatarUrl(co
         {.username = username, .xuid = xuid, .uuid = uuid, .skin_id = skin.getId()});
 }
 
-std::optional<BedrockDiscordBridgePlugin::WebhookTarget>
-BedrockDiscordBridgePlugin::parseWebhookUrl(const std::string &url)
+std::optional<EndcordPlugin::WebhookTarget>
+EndcordPlugin::parseWebhookUrl(const std::string &url)
 {
     static const std::regex pattern(R"(^(https?)://([^/\s]+)(/.*)$)", std::regex::icase);
     std::smatch match;
@@ -1405,7 +1400,7 @@ BedrockDiscordBridgePlugin::parseWebhookUrl(const std::string &url)
     return WebhookTarget{match[1].str() + "://" + match[2].str(), match[3].str()};
 }
 
-std::optional<std::int64_t> BedrockDiscordBridgePlugin::parseRetryDelayMs(const std::string &value)
+std::optional<std::int64_t> EndcordPlugin::parseRetryDelayMs(const std::string &value)
 {
     if (value.empty()) {
         return std::nullopt;
@@ -1420,7 +1415,7 @@ std::optional<std::int64_t> BedrockDiscordBridgePlugin::parseRetryDelayMs(const 
     }
 }
 
-std::optional<std::int64_t> BedrockDiscordBridgePlugin::parseRetryDelayMsFromBody(const std::string &body)
+std::optional<std::int64_t> EndcordPlugin::parseRetryDelayMsFromBody(const std::string &body)
 {
     static const std::regex pattern(R"("retry_after"\s*:\s*([0-9]+(?:\.[0-9]+)?))");
     std::smatch match;
@@ -1431,7 +1426,7 @@ std::optional<std::int64_t> BedrockDiscordBridgePlugin::parseRetryDelayMsFromBod
     return parseRetryDelayMs(match[1].str());
 }
 
-std::string BedrockDiscordBridgePlugin::normalizeRoutePrefix(const std::string &value)
+std::string EndcordPlugin::normalizeRoutePrefix(const std::string &value)
 {
     if (value.empty() || value == "/") {
         return "/avatars";
@@ -1447,7 +1442,7 @@ std::string BedrockDiscordBridgePlugin::normalizeRoutePrefix(const std::string &
     return route;
 }
 
-std::string BedrockDiscordBridgePlugin::normalizeSecret(std::string value)
+std::string EndcordPlugin::normalizeSecret(std::string value)
 {
     value.erase(value.begin(),
                 std::find_if(value.begin(), value.end(), [](unsigned char ch) { return !std::isspace(ch); }));
@@ -1456,22 +1451,22 @@ std::string BedrockDiscordBridgePlugin::normalizeSecret(std::string value)
     return value;
 }
 
-bool BedrockDiscordBridgePlugin::isLoopbackAddress(const std::string &host)
+bool EndcordPlugin::isLoopbackAddress(const std::string &host)
 {
     return host == "127.0.0.1" || host == "::1" || host == "::ffff:127.0.0.1" || host == "localhost";
 }
 
-std::filesystem::path BedrockDiscordBridgePlugin::getConfigPath() const
+std::filesystem::path EndcordPlugin::getConfigPath() const
 {
     return getDataFolder() / "config.json";
 }
 
-std::filesystem::path BedrockDiscordBridgePlugin::getWebhookStatePath() const
+std::filesystem::path EndcordPlugin::getWebhookStatePath() const
 {
     return getDataFolder() / "runtime_webhook.json";
 }
 
-std::string BedrockDiscordBridgePlugin::messageToPlainText(const endstone::Message &message)
+std::string EndcordPlugin::messageToPlainText(const endstone::Message &message)
 {
     return std::visit(
         [](const auto &value) -> std::string {
@@ -1497,7 +1492,7 @@ std::string BedrockDiscordBridgePlugin::messageToPlainText(const endstone::Messa
         message);
 }
 
-std::string BedrockDiscordBridgePlugin::truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
+std::string EndcordPlugin::truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
 {
     if (value.size() <= max_bytes) {
         return value;
@@ -1510,7 +1505,7 @@ std::string BedrockDiscordBridgePlugin::truncateUtf8Bytes(const std::string &val
     return value.substr(0, end);
 }
 
-std::string BedrockDiscordBridgePlugin::escapeJson(const std::string &value)
+std::string EndcordPlugin::escapeJson(const std::string &value)
 {
     std::string escaped;
     escaped.reserve(value.size());

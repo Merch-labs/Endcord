@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bedrock-discord-bridge-bot"
+name = "endcord-bot"
 version = "0.3.0"
-description = "Companion Discord bot for the Bedrock Discord Bridge Endstone plugin."
+description = "Companion Discord bot for the Endcord Endstone plugin."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 [project.scripts]
-bedrock-discord-bridge-bot = "bridge_bot.main:main"
+endcord-bot = "bridge_bot.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
