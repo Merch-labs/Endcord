@@ -96,21 +96,6 @@ std::optional<std::uint32_t> parseIpv4Address(const std::string &value)
     return (octets[0] << 24U) | (octets[1] << 16U) | (octets[2] << 8U) | octets[3];
 }
 
-std::string normalizeAvatarMode(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return std::tolower(ch); });
-    if (value == "self_hosted" || value == "self-hosted" || value == "http_server") {
-        return "rendered";
-    }
-    if (value == "off" || value == "none") {
-        return "disabled";
-    }
-    if (value != "provider" && value != "rendered" && value != "disabled") {
-        return "provider";
-    }
-    return value;
-}
-
 std::string normalizeAvatarProvider(std::string value)
 {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return std::tolower(ch); });

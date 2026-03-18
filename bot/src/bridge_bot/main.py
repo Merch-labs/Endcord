@@ -253,7 +253,7 @@ class BedrockDiscordBridgeBot(discord.Client):
                 f"Minecraft: `{status.get('minecraft_version', 'unknown')}`",
                 f"Online players: `{status.get('online_players', 0)}`",
                 f"Webhook queue depth: `{status.get('webhook_queue_depth', 0)}`",
-                f"Avatar base URL: `{status.get('avatar_base_url') or '<not configured>'}`",
+                f"Avatar provider: `{status.get('avatar_provider') or '<disabled>'}`",
             ]
             await interaction.followup.send("\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses)
 

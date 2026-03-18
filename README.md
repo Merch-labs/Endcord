@@ -1,6 +1,6 @@
 # Bedrock Discord Bridge
 
-Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecraft Bedrock bridge with JSON configuration, per-player webhook identity, Bedrock-aware avatar providers, optional advanced self-hosted skin-head rendering, and a secure local bot API.
+Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecraft Bedrock bridge with JSON configuration, per-player webhook identity, Bedrock-aware avatar providers, and a secure local bot API.
 
 ## What is included
 
@@ -10,9 +10,6 @@ Linux-ready Endstone C++ plugin plus companion Discord bot for a two-way Minecra
 - Rate-limit aware retry path for `429` and transient webhook failures
 - Runtime webhook override API so the companion bot can provision the webhook for the plugin
 - Bedrock-aware external avatar provider mode for easy installs without extra web hosting
-- Bedrock skin face plus hat-overlay rendering to PNG
-- Local avatar cache under the plugin data folder
-- Built-in HTTP server for serving avatar PNGs
 - Secure local bot bridge API for Discord-to-Minecraft relay and remote command execution
 - JSON config with nested sections for Discord, relay toggles, logging, queue, avatar options, and bot bridge settings
 - Companion Discord bot with its own JSON config and slash commands
@@ -84,14 +81,11 @@ Config notes:
 - `discord.username_template`, `discord.content_template`, `discord.system_username_template`, and the join/quit/death templates support `{player}`, `{message}`, `{event_message}`, `{event}`, `{skin_id}`, and `{server}`.
 - `relay.minecraft_to_discord_enabled` is the master outbound switch, and `relay.chat_enabled`, `relay.join_enabled`, `relay.quit_enabled`, and `relay.death_enabled` let you tune which Minecraft events reach Discord.
 - `discord.use_player_avatar_for_system_messages` controls whether join/quit/death webhook posts reuse the player head avatar.
-- `avatar.mode` controls the avatar strategy: `provider` for packaged external avatar services, `rendered` for self-hosted PNGs, `disabled` to send no avatar URLs.
 - `avatar.provider` supports `tabavatars`, `mcheads`, and `custom`.
 - `avatar.provider_url_template` lets server owners bring their own provider with placeholders like `{player}`, `{xuid}`, `{uuid}`, `{uuid_nodashes}`, `{skin_id}`, `{size}`, and `{render_type}`.
 - `avatar.provider_prefer_xuid` makes Bedrock avatar provider lookups use `Player::getXuid()` when possible, which is more stable than gamertags.
-- `avatar.http_server` only matters in `avatar.mode = "rendered"` and can serve the avatar cache directly from the plugin.
-- `avatar.public_base_url` and `avatar.http_server.public_base_url` are self-hosted overrides for rendered mode.
 - `queue.max_size`, `queue.max_attempts`, and timeout values control webhook behavior under load.
-- `logging.log_filtered_events`, `logging.log_webhook_successes`, `logging.log_http_requests`, and the avatar/bot logging flags let you dial the plugin between quiet production mode and detailed troubleshooting.
+- `logging.log_filtered_events`, `logging.log_webhook_successes`, `logging.log_http_requests`, and the bot logging flags let you dial the plugin between quiet production mode and detailed troubleshooting.
 - `bot_bridge.enabled` turns on the local HTTP API used by the companion Discord bot.
 - `bot_bridge.shared_secret` must match the bot config exactly.
 - `bot_bridge.api_route_prefix` must line up with the bot's `plugin_bridge.base_url`.
@@ -102,32 +96,15 @@ Config notes:
 - `bot_bridge.inbound_chat_template` supports `{author}`, `{content}`, `{channel}`, `{guild}`, `{message_url}`, and `{server}`.
 - `bot_bridge.inbound_chat_max_length` clamps how much Discord content the plugin will project into Minecraft chat.
 
-## Avatar hosting
+## Avatar providers
 
-For easy distribution, the default mode is `avatar.mode = "provider"`. That avoids extra infrastructure and gives Bedrock players avatars immediately by using a public provider that understands Bedrock XUIDs and gamertags.
+The plugin now uses provider-based avatars only. That keeps installs simple and avoids shipping any self-hosted avatar rendering, cache serving, tunnel, or proxy logic.
 
-Tunnels and proxy containers are not part of the recommended setup for this project. If you choose `avatar.mode = "rendered"`, all Discord needs is a stable public URL for the generated PNGs.
+Use one of:
 
-If you want self-hosted avatars instead, Discord webhook `avatar_url` must still be a URL Discord can fetch. In rendered mode the plugin generates and caches PNGs locally, then maps them to:
-
-```text
-<effective-avatar-base-url>/<skin-hash>.png
-```
-
-Practical self-hosted path:
-
-1. Enable `avatar.http_server`.
-2. Expose its route through any stable public HTTP or HTTPS URL you control.
-3. Set `avatar.http_server.public_base_url` to the public URL for that route.
-4. Let the plugin render and reuse cached head icons by skin hash.
-
-Examples of acceptable rendered-mode hosting:
-
-- your own domain plus reverse proxy
-- a public host and port you already expose
-- any other stable public URL you control
-
-This keeps the default install simple while still leaving a self-hosted fallback available for advanced deployments.
+- `tabavatars`
+- `mcheads`
+- `custom` through `avatar.provider_url_template`
 
 ## Recommended Discord architecture
 
@@ -138,18 +115,16 @@ Use a hybrid model:
 
 Practical avatar path:
 
-1. Read Bedrock skin RGBA data from `player.getSkin().getImage()`.
-2. Extract the face region and hat/overlay region into a square head render.
-3. Write the PNG to the local avatar cache.
-4. Publish that cache directory behind a stable public URL or the built-in avatar HTTP server when you choose rendered mode.
-5. Reuse the resulting `avatar_url` for subsequent webhook messages until the skin hash changes.
+1. Read Bedrock player identity data such as gamertag, XUID, UUID, and skin id.
+2. Build a provider URL for the configured avatar service.
+3. Reuse that provider URL in the webhook `avatar_url` field for Minecraft-originated messages.
 
 Rate-limit strategy:
 
 - Queue outbound webhook posts instead of sending inline on the chat event thread
 - Respect Discord `429` responses and `Retry-After`
 - Group local throttling by `X-RateLimit-Bucket`
-- Cache avatar URLs aggressively so avatar renders are much rarer than chat sends
+- Cache provider resolution decisions in-process where useful, but keep the runtime focused on fast webhook delivery
 - Retry transient webhook failures with bounded backoff instead of blocking the server thread
 
 ## Companion bot
@@ -192,7 +167,7 @@ Bot config highlights:
 1. Build the plugin with `cmake --preset linux-clang-local-libcxx` and `cmake --build --preset build-local`.
 2. Copy `build-local/endstone_bedrock_discord_bridge.so` into your Bedrock server `plugins/` directory.
 3. Copy [config/config.json.example](config/config.json.example) to the plugin data folder as `config.json` and fill in the bot bridge settings. A manual webhook URL is optional if the bot is allowed to auto-create one.
-4. Start the server once so the plugin creates its data directories and avatar cache path.
+4. Start the server once so the plugin creates its data directory and bridge runtime files.
 5. Set up the companion bot from [plugins/endcord/bot/config.json](plugins/endcord/bot/config.json), making sure `plugin_bridge.shared_secret` matches `bot_bridge.shared_secret`.
 6. Fill in `discord.token` and at least one channel id. The default bot config can auto-derive the guild and auto-create the webhook.
 7. Run the bot in the same local runtime environment as Endstone while `bot_bridge.allow_local_requests_only` is enabled, ideally through [bot/scripts/run-local-runtime.sh](bot/scripts/run-local-runtime.sh) or a system service based on [bedrock-discord-bridge-bot.service.example](bot/systemd/bedrock-discord-bridge-bot.service.example).
@@ -201,7 +176,7 @@ Bot config highlights:
 
 - Implemented: Minecraft-to-Discord relay via webhook with per-message username and avatar URL support
 - Implemented: Configurable relay templates and event toggles for chat, join, quit, and death messages
-- Implemented: Bedrock skin head rendering, caching, and built-in avatar HTTP serving
+- Implemented: Provider-based Bedrock avatar URLs for webhook identity rendering
 - Implemented: Discord-to-Minecraft relay through the companion bot and secure plugin API
 - Implemented: Optional bot-owned delivery path for lifecycle/system messages while player chat stays on the webhook
 - Implemented: Customizable companion-bot presence and relay/logging controls

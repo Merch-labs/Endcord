@@ -22,8 +22,6 @@ int main()
     using bridge_support::AvatarProviderOptions;
     using bridge_support::PlayerIdentity;
 
-    expect(bridge_support::normalizeAvatarMode("self_hosted") == "rendered", "avatar mode normalization");
-    expect(bridge_support::normalizeAvatarMode("none") == "disabled", "avatar disabled normalization");
     expect(bridge_support::normalizeAvatarProvider("mc-heads") == "mcheads", "provider normalization");
 
     expect(bridge_support::isAllowedRemoteAddress("172.19.0.5", {"172.19.0.0/16"}), "cidr allowlist");

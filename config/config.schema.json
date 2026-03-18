@@ -154,24 +154,16 @@
       "additionalProperties": false,
       "required": [
         "enabled",
-        "mode",
         "provider",
         "provider_url_template",
         "provider_prefer_xuid",
         "provider_render_type",
         "provider_bedrock_username_prefix",
-        "size",
-        "cache_subdirectory",
-        "public_base_url",
-        "http_server"
+        "size"
       ],
       "properties": {
         "enabled": {
           "type": "boolean"
-        },
-        "mode": {
-          "type": "string",
-          "enum": ["provider", "rendered", "disabled"]
         },
         "provider": {
           "type": "string",
@@ -193,52 +185,6 @@
           "type": "integer",
           "minimum": 8,
           "maximum": 512
-        },
-        "cache_subdirectory": {
-          "type": "string"
-        },
-        "public_base_url": {
-          "type": "string"
-        },
-        "http_server": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "enabled",
-            "bind_host",
-            "port",
-            "route_prefix",
-            "public_base_url",
-            "cache_control",
-            "thread_count"
-          ],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "bind_host": {
-              "type": "string"
-            },
-            "port": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 65535
-            },
-            "route_prefix": {
-              "type": "string"
-            },
-            "public_base_url": {
-              "type": "string"
-            },
-            "cache_control": {
-              "type": "string"
-            },
-            "thread_count": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 64
-            }
-          }
         }
       }
     },
@@ -319,8 +265,6 @@
         "log_filtered_events",
         "log_webhook_successes",
         "log_http_requests",
-        "log_avatar_cache_hits",
-        "log_avatar_cache_misses",
         "log_inbound_chat",
         "log_remote_commands"
       ],
@@ -332,12 +276,6 @@
           "type": "boolean"
         },
         "log_http_requests": {
-          "type": "boolean"
-        },
-        "log_avatar_cache_hits": {
-          "type": "boolean"
-        },
-        "log_avatar_cache_misses": {
           "type": "boolean"
         },
         "log_inbound_chat": {

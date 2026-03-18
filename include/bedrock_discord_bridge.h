@@ -71,28 +71,14 @@ private:
         int write_timeout_ms = 5000;
     };
 
-    struct AvatarHttpServerOptions {
-        bool enabled = true;
-        std::string bind_host = "0.0.0.0";
-        int port = 8089;
-        std::string route_prefix = "/bedrock-discord-bridge/avatars";
-        std::string public_base_url;
-        std::string cache_control = "public, max-age=86400";
-        int thread_count = 4;
-    };
-
     struct AvatarOptions {
         bool enabled = true;
-        std::string mode = "provider";
         std::string provider = "tabavatars";
         std::string provider_url_template;
         bool provider_prefer_xuid = true;
         std::string provider_render_type = "helm";
         std::string provider_bedrock_username_prefix = ".";
         int size = 64;
-        std::string cache_subdirectory = "avatars";
-        std::string public_base_url;
-        AvatarHttpServerOptions http_server{};
     };
 
     struct BotBridgeOptions {
@@ -115,14 +101,12 @@ private:
         bool log_filtered_events = false;
         bool log_webhook_successes = false;
         bool log_http_requests = false;
-        bool log_avatar_cache_hits = false;
-        bool log_avatar_cache_misses = false;
         bool log_inbound_chat = false;
         bool log_remote_commands = true;
     };
 
     struct BridgeConfig {
-        int config_version = 5;
+        int config_version = 6;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};
@@ -141,11 +125,6 @@ private:
         std::string player_name;
         std::string payload;
         int attempt = 0;
-    };
-
-    struct AvatarCacheEntry {
-        std::filesystem::path file_path;
-        std::optional<std::string> public_url;
     };
 
     struct PendingSystemMessage {
@@ -188,34 +167,23 @@ private:
 
     std::optional<std::string> getOrCreateAvatarUrl(const endstone::Player &player);
     std::optional<std::string> buildProviderAvatarUrl(const endstone::Player &player) const;
-    std::optional<AvatarCacheEntry> renderAvatarIfNeeded(const endstone::Player &player);
-    bool writeHeadPng(const endstone::Skin &skin, const std::filesystem::path &output_path) const;
-    static std::vector<std::uint8_t> renderHeadRgba(const endstone::Image &image, int avatar_size);
-    static endstone::Color sampleSkinCell(const endstone::Image &image, int origin_x, int origin_y, int scale);
-    static endstone::Color alphaBlend(endstone::Color base, endstone::Color overlay);
-    static std::string computeSkinCacheKey(const endstone::Skin &skin, int avatar_size);
     static std::optional<WebhookTarget> parseWebhookUrl(const std::string &url);
     static std::optional<std::int64_t> parseRetryDelayMs(const std::string &value);
     static std::optional<std::int64_t> parseRetryDelayMsFromBody(const std::string &body);
     static std::string normalizeRoutePrefix(const std::string &value);
     static std::string normalizeSecret(std::string value);
-    static bool isWildcardHost(const std::string &host);
     static bool isLoopbackAddress(const std::string &host);
-    static std::string joinUrl(const std::string &base, const std::string &leaf);
     static std::string messageToPlainText(const endstone::Message &message);
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 
     std::filesystem::path getConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
-    std::filesystem::path getAvatarCacheDir() const;
-    std::optional<std::string> getEffectiveAvatarBaseUrl() const;
 
     static std::string escapeJson(const std::string &value);
 
     BridgeConfig config_;
     std::optional<WebhookTarget> webhook_target_;
     bool runtime_webhook_override_active_ = false;
-    std::unordered_map<std::string, AvatarCacheEntry> avatar_cache_;
 
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;

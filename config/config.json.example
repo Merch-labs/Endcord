@@ -32,24 +32,12 @@
   },
   "avatar": {
     "enabled": true,
-    "mode": "provider",
     "provider": "tabavatars",
     "provider_url_template": "",
     "provider_prefer_xuid": true,
     "provider_render_type": "helm",
     "provider_bedrock_username_prefix": ".",
-    "size": 64,
-    "cache_subdirectory": "avatars",
-    "public_base_url": "",
-    "http_server": {
-      "enabled": true,
-      "bind_host": "0.0.0.0",
-      "port": 8089,
-      "route_prefix": "/bedrock-discord-bridge/avatars",
-      "public_base_url": "",
-      "cache_control": "public, max-age=86400",
-      "thread_count": 4
-    }
+    "size": 64
   },
   "bot_bridge": {
     "enabled": true,
@@ -70,8 +58,6 @@
     "log_filtered_events": false,
     "log_webhook_successes": false,
     "log_http_requests": false,
-    "log_avatar_cache_hits": false,
-    "log_avatar_cache_misses": false,
     "log_inbound_chat": false,
     "log_remote_commands": true
   }

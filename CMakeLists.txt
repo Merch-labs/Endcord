@@ -22,31 +22,19 @@ FetchContent_Declare(
     GIT_TAG 9639578c2a05ae8b93f589ef2cf4ba42e222af90
 )
 FetchContent_Declare(
-    lodepng
-    GIT_REPOSITORY https://github.com/lvandeve/lodepng.git
-    GIT_TAG 22561883dd63fd1850f18e1f6adac321e4f609b0
-)
-FetchContent_Declare(
     nlohmann_json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
 )
 FetchContent_MakeAvailable(endstone)
 FetchContent_MakeAvailable(cpp_httplib)
 FetchContent_MakeAvailable(nlohmann_json)
-FetchContent_GetProperties(lodepng)
-if (NOT lodepng_POPULATED)
-    FetchContent_Populate(lodepng)
-endif ()
-
-add_library(lodepng STATIC ${lodepng_SOURCE_DIR}/lodepng.cpp)
-target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
 
 add_library(bridge_support STATIC src/bridge_support.cpp)
 target_include_directories(bridge_support PUBLIC include)
 
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support httplib::httplib lodepng nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support httplib::httplib nlohmann_json::nlohmann_json)
 
 add_executable(bridge_support_tests tests/bridge_support_test.cpp)
 target_link_libraries(bridge_support_tests PRIVATE bridge_support)
