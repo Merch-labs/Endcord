@@ -56,7 +56,7 @@ ENDSTONE_PLUGIN(/*name=*/"bedrock_discord_bridge",
 
 BedrockDiscordBridgePlugin::~BedrockDiscordBridgePlugin()
 {
-    stopAvatarServer();
+    stopBridgeServer();
     stopWorker();
 }
 
@@ -81,7 +81,7 @@ void BedrockDiscordBridgePlugin::onEnable()
 
 void BedrockDiscordBridgePlugin::onDisable()
 {
-    stopAvatarServer();
+    stopBridgeServer();
     stopWorker();
     getLogger().info("Plugin disabled.");
 }
@@ -110,7 +110,7 @@ bool BedrockDiscordBridgePlugin::onCommand(endstone::CommandSender &sender, cons
             return true;
         }
 
-        stopAvatarServer();
+        stopBridgeServer();
         stopWorker();
         clearQueue();
         avatar_cache_.clear();
@@ -562,6 +562,13 @@ void BedrockDiscordBridgePlugin::loadConfig()
         if (!webhook_target_) {
             getLogger().error("Configured Discord webhook URL is invalid.");
         }
+        clearWebhookState();
+    }
+    else if (config_.discord.allow_runtime_webhook_override) {
+        loadWebhookState();
+    }
+    else {
+        clearWebhookState();
     }
 
     if (config_.bot_bridge.enabled && config_.bot_bridge.shared_secret.empty()) {
@@ -588,7 +595,7 @@ void BedrockDiscordBridgePlugin::restartRuntime()
         return;
     }
 
-    startAvatarServer();
+    startBridgeServer();
     startWorker();
 }
 
@@ -656,9 +663,9 @@ void BedrockDiscordBridgePlugin::stopWorker()
     webhook_client_.reset();
 }
 
-void BedrockDiscordBridgePlugin::startAvatarServer()
+void BedrockDiscordBridgePlugin::startBridgeServer()
 {
-    stopAvatarServer();
+    stopBridgeServer();
 
     const bool needs_http_server = config_.enabled &&
                                    ((config_.avatar.enabled && config_.avatar.mode == "rendered" &&
@@ -668,28 +675,28 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
         return;
     }
 
-    avatar_server_ = std::make_unique<httplib::Server>();
-    avatar_server_->set_default_headers({{"Cache-Control", config_.avatar.http_server.cache_control}});
-    avatar_server_->new_task_queue = [thread_count = static_cast<size_t>(config_.avatar.http_server.thread_count)] {
+    bridge_server_ = std::make_unique<httplib::Server>();
+    bridge_server_->set_default_headers({{"Cache-Control", config_.avatar.http_server.cache_control}});
+    bridge_server_->new_task_queue = [thread_count = static_cast<size_t>(config_.avatar.http_server.thread_count)] {
         return new httplib::ThreadPool(thread_count);
     };
 
     if (config_.avatar.enabled && config_.avatar.mode == "rendered" && config_.avatar.http_server.enabled) {
-        avatar_server_->set_file_extension_and_mimetype_mapping("png", "image/png");
+        bridge_server_->set_file_extension_and_mimetype_mapping("png", "image/png");
 
         const auto cache_dir = getAvatarCacheDir().string();
-        if (!avatar_server_->set_mount_point(config_.avatar.http_server.route_prefix, cache_dir,
+        if (!bridge_server_->set_mount_point(config_.avatar.http_server.route_prefix, cache_dir,
                                              {{"Cache-Control", config_.avatar.http_server.cache_control}})) {
             getLogger().error("Failed to mount avatar cache directory '{}' at route '{}'.", cache_dir,
                               config_.avatar.http_server.route_prefix);
-            avatar_server_.reset();
+            bridge_server_.reset();
             return;
         }
     }
 
     installBotBridgeRoutes();
 
-    avatar_server_->set_logger([this](const auto &req, const auto &res) {
+    bridge_server_->set_logger([this](const auto &req, const auto &res) {
         if (config_.logging.log_http_requests || res.status >= 400) {
             getLogger().debug("Bridge HTTP {} {} -> {}", req.method, req.path, res.status);
         }
@@ -697,12 +704,12 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
 
     const auto host = config_.avatar.http_server.bind_host;
     const auto port = config_.avatar.http_server.port;
-    avatar_server_thread_ = std::thread([this, host, port] {
-        if (!avatar_server_) {
+    bridge_server_thread_ = std::thread([this, host, port] {
+        if (!bridge_server_) {
             return;
         }
 
-        if (!avatar_server_->listen(host.c_str(), port)) {
+        if (!bridge_server_->listen(host.c_str(), port)) {
             getLogger().error("Bridge HTTP server failed to listen on {}:{}.", host, port);
         }
     });
@@ -710,17 +717,17 @@ void BedrockDiscordBridgePlugin::startAvatarServer()
     getLogger().info("Bridge HTTP server starting on {}:{}.", host, port);
 }
 
-void BedrockDiscordBridgePlugin::stopAvatarServer()
+void BedrockDiscordBridgePlugin::stopBridgeServer()
 {
-    if (avatar_server_) {
-        avatar_server_->stop();
+    if (bridge_server_) {
+        bridge_server_->stop();
     }
 
-    if (avatar_server_thread_.joinable()) {
-        avatar_server_thread_.join();
+    if (bridge_server_thread_.joinable()) {
+        bridge_server_thread_.join();
     }
 
-    avatar_server_.reset();
+    bridge_server_.reset();
 }
 
 void BedrockDiscordBridgePlugin::workerLoop()
@@ -934,7 +941,7 @@ void BedrockDiscordBridgePlugin::sendStatus(endstone::CommandSender &sender) con
     sender.sendMessage("Avatar cache dir: {}", getAvatarCacheDir().string());
     sender.sendMessage("Avatar HTTP server enabled: {}", config_.avatar.http_server.enabled ? "yes" : "no");
     sender.sendMessage("Avatar HTTP server running: {}",
-                       (avatar_server_ && avatar_server_->is_running()) ? "yes" : "no");
+                       (bridge_server_ && bridge_server_->is_running()) ? "yes" : "no");
     sender.sendMessage("Avatar public base URL: {}", getEffectiveAvatarBaseUrl().value_or("<not configured>"));
     sender.sendMessage("Bot bridge enabled: {}", config_.bot_bridge.enabled ? "yes" : "no");
     sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
@@ -1021,25 +1028,25 @@ void BedrockDiscordBridgePlugin::processWebhookJob(WebhookJob job)
 
 void BedrockDiscordBridgePlugin::installBotBridgeRoutes()
 {
-    if (!avatar_server_ || !config_.bot_bridge.enabled) {
+    if (!bridge_server_ || !config_.bot_bridge.enabled) {
         return;
     }
 
-    avatar_server_->Get(config_.bot_bridge.api_route_prefix + "/status",
+    bridge_server_->Get(config_.bot_bridge.api_route_prefix + "/status",
                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeStatus(req, res); });
-    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/chat",
+    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/chat",
                          [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeChat(req, res); });
-    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/command",
+    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/command",
                          [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeCommand(req, res); });
-    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/system-messages/drain",
+    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/system-messages/drain",
                          [this](const httplib::Request &req, httplib::Response &res) {
                              handleBotBridgeDrainSystemMessages(req, res);
                          });
-    avatar_server_->Post(config_.bot_bridge.api_route_prefix + "/webhook",
+    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/webhook",
                          [this](const httplib::Request &req, httplib::Response &res) {
                              handleBotBridgeConfigureWebhook(req, res);
                          });
-    avatar_server_->Get(config_.bot_bridge.api_route_prefix + "/healthz",
+    bridge_server_->Get(config_.bot_bridge.api_route_prefix + "/healthz",
                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeHealth(req, res); });
 }
 
@@ -1295,6 +1302,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeConfigureWebhook(const httplib::
 
     webhook_target_ = parsed;
     runtime_webhook_override_active_ = true;
+    persistWebhookState();
     startWorker();
 
     res.status = 200;
@@ -1319,7 +1327,7 @@ void BedrockDiscordBridgePlugin::handleBotBridgeHealth(const httplib::Request &r
     res.status = 200;
     res.set_content(json({{"ok", true},
                           {"server_running", true},
-                          {"http_server_running", avatar_server_ && avatar_server_->is_running()},
+                          {"http_server_running", bridge_server_ && bridge_server_->is_running()},
                           {"webhook_worker_running", worker_thread_.joinable()},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"webhook_queue_depth", queue_depth}})
@@ -1380,6 +1388,73 @@ bool BedrockDiscordBridgePlugin::isAuthorizedBotBridgeHealthRequest(const httpli
 {
     return isLoopbackAddress(req.remote_addr) ||
            isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
+}
+
+void BedrockDiscordBridgePlugin::loadWebhookState()
+{
+    const auto state_path = getWebhookStatePath();
+    if (!fs::exists(state_path)) {
+        return;
+    }
+
+    std::ifstream input(state_path);
+    if (!input.is_open()) {
+        getLogger().warning("Could not open runtime webhook state '{}'.", state_path.string());
+        return;
+    }
+
+    try {
+        const auto state = json::parse(input);
+        const auto webhook_url = state.value("webhook_url", "");
+        const auto parsed = parseWebhookUrl(webhook_url);
+        if (!parsed) {
+            getLogger().warning("Ignoring invalid runtime webhook state from '{}'.", state_path.string());
+            clearWebhookState();
+            return;
+        }
+
+        webhook_target_ = parsed;
+        runtime_webhook_override_active_ = true;
+        getLogger().info("Loaded runtime webhook override from '{}'.", state_path.string());
+    }
+    catch (const std::exception &e) {
+        getLogger().warning("Failed to parse runtime webhook state '{}': {}", state_path.string(), e.what());
+        clearWebhookState();
+    }
+}
+
+void BedrockDiscordBridgePlugin::persistWebhookState() const
+{
+    if (!runtime_webhook_override_active_ || !webhook_target_.has_value()) {
+        return;
+    }
+
+    const auto state_path = getWebhookStatePath();
+    std::error_code ec;
+    fs::create_directories(state_path.parent_path(), ec);
+    if (ec) {
+        getLogger().warning("Could not create runtime webhook state directory '{}': {}", state_path.parent_path().string(),
+                            ec.message());
+        return;
+    }
+
+    std::ofstream output(state_path);
+    if (!output.is_open()) {
+        getLogger().warning("Could not write runtime webhook state '{}'.", state_path.string());
+        return;
+    }
+
+    output << json({{"webhook_url", webhook_target_->origin + webhook_target_->path}}).dump(2) << '\n';
+}
+
+void BedrockDiscordBridgePlugin::clearWebhookState() const
+{
+    std::error_code ec;
+    fs::remove(getWebhookStatePath(), ec);
+    if (ec && ec.value() != 2) {
+        getLogger().warning("Could not clear runtime webhook state '{}': {}", getWebhookStatePath().string(),
+                            ec.message());
+    }
 }
 
 std::optional<std::string> BedrockDiscordBridgePlugin::getOrCreateAvatarUrl(const endstone::Player &player)
@@ -1863,6 +1938,11 @@ std::string BedrockDiscordBridgePlugin::urlEncode(const std::string &value)
 std::filesystem::path BedrockDiscordBridgePlugin::getConfigPath() const
 {
     return getDataFolder() / "config.json";
+}
+
+std::filesystem::path BedrockDiscordBridgePlugin::getWebhookStatePath() const
+{
+    return getDataFolder() / "runtime_webhook.json";
 }
 
 std::filesystem::path BedrockDiscordBridgePlugin::getAvatarCacheDir() const

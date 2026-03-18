@@ -161,8 +161,8 @@ private:
     void clearQueue();
     void startWorker();
     void stopWorker();
-    void startAvatarServer();
-    void stopAvatarServer();
+    void startBridgeServer();
+    void stopBridgeServer();
     void workerLoop();
     void sendStatus(endstone::CommandSender &sender) const;
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
@@ -182,6 +182,9 @@ private:
     void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
     bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
     bool isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const;
+    void loadWebhookState();
+    void persistWebhookState() const;
+    void clearWebhookState() const;
 
     std::optional<std::string> getOrCreateAvatarUrl(const endstone::Player &player);
     std::optional<std::string> buildProviderAvatarUrl(const endstone::Player &player) const;
@@ -211,6 +214,7 @@ private:
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 
     std::filesystem::path getConfigPath() const;
+    std::filesystem::path getWebhookStatePath() const;
     std::filesystem::path getAvatarCacheDir() const;
     std::optional<std::string> getEffectiveAvatarBaseUrl() const;
 
@@ -226,8 +230,8 @@ private:
     std::deque<WebhookJob> webhook_queue_;
     std::thread worker_thread_;
     std::unique_ptr<httplib::Client> webhook_client_;
-    std::unique_ptr<httplib::Server> avatar_server_;
-    std::thread avatar_server_thread_;
+    std::unique_ptr<httplib::Server> bridge_server_;
+    std::thread bridge_server_thread_;
     bool stop_worker_ = false;
     std::chrono::steady_clock::time_point next_request_at_ = std::chrono::steady_clock::now();
     mutable std::mutex system_message_mutex_;
