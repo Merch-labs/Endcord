@@ -1,5 +1,5 @@
 {
-  "config_version": 7,
+  "config_version": 8,
   "enabled": true,
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/replace-me",
@@ -60,5 +60,13 @@
     "log_http_requests": false,
     "log_inbound_chat": false,
     "log_remote_commands": true
+  },
+  "managed_bot": {
+    "enabled": true,
+    "executable_path": "{plugin_data}/bot/.venv/bin/endcord-bot",
+    "config_path": "{plugin_data}/bot/config.json",
+    "working_directory": "{plugin_data}/bot",
+    "log_path": "{plugin_data}/bot/bot.log",
+    "stop_timeout_ms": 5000
   }
 }

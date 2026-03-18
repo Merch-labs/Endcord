@@ -12,8 +12,9 @@ The normal setup is:
 
 1. put the plugin in your server `plugins/` folder
 2. start the server once
-3. paste in your bot token, channel id, and shared secret
-4. run the bot beside the server
+3. bootstrap the bot into `plugins/endcord/bot/`
+4. paste in your bot token and channel id
+5. let the server start and stop the bot with the plugin
 
 You do not need Docker-specific setup, tunnels, proxies, or self-hosted avatar hosting for the default path.
 
@@ -67,6 +68,7 @@ The most important plugin settings are:
 - `bot_bridge.allow_local_requests_only`
 - `avatar.provider`
 - `bot_bridge.inbound_chat_template`
+- `managed_bot.enabled`
 
 For most users:
 
@@ -99,20 +101,18 @@ Usually you can leave these as-is:
 - `plugin_bridge.base_url = http://127.0.0.1:8089/endcord/api`
 
 The bot will automatically read `bot_bridge.shared_secret` from the colocated plugin config.
+The plugin will automatically start the bot from `plugins/endcord/bot/.venv/bin/endcord-bot`.
 
 Bot schema:
 - [bot/config.schema.json](bot/config.schema.json)
 
-### 5. Run the bot
+### 5. Start the server
 
-Run the bot in the same local runtime environment as Endstone:
+Start or restart Endstone after the bot is bootstrapped into `plugins/endcord/bot/`.
+Endcord will start and stop the bot process with the plugin.
 
-```bash
-cd bot
-./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
-```
-
-For automatic startup, adapt:
+If you want to run the bot outside the server-managed path, you can still use:
+- [run-local-runtime.sh](bot/scripts/run-local-runtime.sh)
 - [endcord-bot.service.example](bot/systemd/endcord-bot.service.example)
 
 ### 6. What should happen
@@ -150,6 +150,8 @@ Plugin-side formatting:
 - `discord.quit_content_template`
 - `discord.death_content_template`
 - `bot_bridge.inbound_chat_template`
+- `managed_bot.enabled`
+- `managed_bot.log_path`
 
 Bot-side formatting:
 
@@ -234,6 +236,7 @@ Check:
 
 - the bot is running
 - the bot config is at `plugins/endcord/bot/config.json`
+- the managed bot executable exists at `plugins/endcord/bot/.venv/bin/endcord-bot`
 - `plugin_bridge.base_url` points at `127.0.0.1`
 - `discord.relay_channel_ids` contains the right channel
 

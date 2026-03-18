@@ -3,8 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-VENV_DIR="${BOT_VENV_DIR:-${BOT_DIR}/.venv}"
 CONFIG_PATH="${1:-${BOT_DIR}/config.json}"
+CONFIG_DIR=$(cd "$(dirname "${CONFIG_PATH}")" && pwd)
+VENV_DIR="${BOT_VENV_DIR:-${CONFIG_DIR}/.venv}"
 
 if [[ ! -x "${VENV_DIR}/bin/endcord-bot" ]]; then
     echo "Companion bot is not installed in ${VENV_DIR}." >&2

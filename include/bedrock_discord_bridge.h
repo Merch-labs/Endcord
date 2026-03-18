@@ -105,8 +105,17 @@ private:
         bool log_remote_commands = true;
     };
 
+    struct ManagedBotOptions {
+        bool enabled = true;
+        std::string executable_path = "{plugin_data}/bot/.venv/bin/endcord-bot";
+        std::string config_path = "{plugin_data}/bot/config.json";
+        std::string working_directory = "{plugin_data}/bot";
+        std::string log_path = "{plugin_data}/bot/bot.log";
+        int stop_timeout_ms = 5000;
+    };
+
     struct BridgeConfig {
-        int config_version = 7;
+        int config_version = 8;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};
@@ -114,6 +123,7 @@ private:
         AvatarOptions avatar{};
         BotBridgeOptions bot_bridge{};
         LoggingOptions logging{};
+        ManagedBotOptions managed_bot{};
     };
 
     struct WebhookTarget {
@@ -142,6 +152,8 @@ private:
     void stopWorker();
     void startBridgeServer();
     void stopBridgeServer();
+    void startManagedBot();
+    void stopManagedBot();
     void workerLoop();
     void sendStatus(endstone::CommandSender &sender) const;
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
@@ -175,6 +187,8 @@ private:
     static bool isLoopbackAddress(const std::string &host);
     static std::string messageToPlainText(const endstone::Message &message);
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
+    std::filesystem::path expandManagedBotPath(const std::string &value) const;
+    bool isManagedBotRunning() const;
 
     std::filesystem::path getConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
@@ -196,4 +210,5 @@ private:
     std::chrono::steady_clock::time_point next_request_at_ = std::chrono::steady_clock::now();
     mutable std::mutex system_message_mutex_;
     std::deque<PendingSystemMessage> pending_system_messages_;
+    int managed_bot_pid_ = -1;
 };

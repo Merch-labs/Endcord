@@ -12,7 +12,8 @@
     "queue",
     "avatar",
     "bot_bridge",
-    "logging"
+    "logging",
+    "managed_bot"
   ],
   "properties": {
     "config_version": {
@@ -283,6 +284,39 @@
         },
         "log_remote_commands": {
           "type": "boolean"
+        }
+      }
+    },
+    "managed_bot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "executable_path",
+        "config_path",
+        "working_directory",
+        "log_path",
+        "stop_timeout_ms"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "executable_path": {
+          "type": "string"
+        },
+        "config_path": {
+          "type": "string"
+        },
+        "working_directory": {
+          "type": "string"
+        },
+        "log_path": {
+          "type": "string"
+        },
+        "stop_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
         }
       }
     }

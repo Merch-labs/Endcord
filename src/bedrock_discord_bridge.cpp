@@ -6,6 +6,7 @@
 #include <endstone/command/command_sender_wrapper.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -15,9 +16,16 @@
 #include <iomanip>
 #include <memory>
 #include <optional>
+#include <fcntl.h>
 #include <regex>
 #include <sstream>
+#include <signal.h>
 #include <system_error>
+#include <sys/prctl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <thread>
+#include <unistd.h>
 #include <utility>
 #include <variant>
 
@@ -56,7 +64,7 @@ ReplacementList makeInboundChatTemplateReplacements(const std::string &author, c
 }  // namespace
 
 ENDSTONE_PLUGIN(/*name=*/"endcord",
-                /*version=*/"0.6.0",
+                /*version=*/"0.7.0",
                 /*main_class=*/EndcordPlugin)
 {
     prefix = "Endcord";
@@ -84,6 +92,7 @@ ENDSTONE_PLUGIN(/*name=*/"endcord",
 
 EndcordPlugin::~EndcordPlugin()
 {
+    stopManagedBot();
     stopBridgeServer();
     stopWorker();
 }
@@ -109,6 +118,7 @@ void EndcordPlugin::onEnable()
 
 void EndcordPlugin::onDisable()
 {
+    stopManagedBot();
     stopBridgeServer();
     stopWorker();
     getLogger().info("Plugin disabled.");
@@ -138,6 +148,7 @@ bool EndcordPlugin::onCommand(endstone::CommandSender &sender, const endstone::C
             return true;
         }
 
+        stopManagedBot();
         stopBridgeServer();
         stopWorker();
         clearQueue();
@@ -219,7 +230,7 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
     }
 
     json root = {
-        {"config_version", 7},
+        {"config_version", 8},
         {"enabled", true},
         {"discord",
          {{"webhook_url", ""},
@@ -274,7 +285,14 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
           {"log_webhook_successes", false},
           {"log_http_requests", false},
           {"log_inbound_chat", false},
-          {"log_remote_commands", true}}}
+          {"log_remote_commands", true}}},
+        {"managed_bot",
+         {{"enabled", true},
+          {"executable_path", "{plugin_data}/bot/.venv/bin/endcord-bot"},
+          {"config_path", "{plugin_data}/bot/config.json"},
+          {"working_directory", "{plugin_data}/bot"},
+          {"log_path", "{plugin_data}/bot/bot.log"},
+          {"stop_timeout_ms", 5000}}}
     };
 
     std::ofstream output(config_path);
@@ -488,6 +506,28 @@ void EndcordPlugin::loadConfig()
                 config_.logging.log_remote_commands = logging["log_remote_commands"].get<bool>();
             }
         }
+
+        if (root.contains("managed_bot") && root["managed_bot"].is_object()) {
+            const auto &managed_bot = root["managed_bot"];
+            if (managed_bot.contains("enabled") && managed_bot["enabled"].is_boolean()) {
+                config_.managed_bot.enabled = managed_bot["enabled"].get<bool>();
+            }
+            if (managed_bot.contains("executable_path") && managed_bot["executable_path"].is_string()) {
+                config_.managed_bot.executable_path = managed_bot["executable_path"].get<std::string>();
+            }
+            if (managed_bot.contains("config_path") && managed_bot["config_path"].is_string()) {
+                config_.managed_bot.config_path = managed_bot["config_path"].get<std::string>();
+            }
+            if (managed_bot.contains("working_directory") && managed_bot["working_directory"].is_string()) {
+                config_.managed_bot.working_directory = managed_bot["working_directory"].get<std::string>();
+            }
+            if (managed_bot.contains("log_path") && managed_bot["log_path"].is_string()) {
+                config_.managed_bot.log_path = managed_bot["log_path"].get<std::string>();
+            }
+            if (managed_bot.contains("stop_timeout_ms") && managed_bot["stop_timeout_ms"].is_number_integer()) {
+                config_.managed_bot.stop_timeout_ms = managed_bot["stop_timeout_ms"].get<int>();
+            }
+        }
     }
     catch (const std::exception &e) {
         getLogger().error("Failed to parse config '{}': {}", config_path.string(), e.what());
@@ -514,6 +554,7 @@ void EndcordPlugin::loadConfig()
     config_.bot_bridge.outbound_system_message_queue_max_size =
         std::clamp(config_.bot_bridge.outbound_system_message_queue_max_size, 1, 4096);
     config_.bot_bridge.request_timeout_ms = std::max(config_.bot_bridge.request_timeout_ms, 250);
+    config_.managed_bot.stop_timeout_ms = std::max(config_.managed_bot.stop_timeout_ms, 100);
 
     if (!config_.avatar.provider_url_template.empty() && config_.avatar.provider_url_template.ends_with('/')) {
         config_.avatar.provider_url_template.pop_back();
@@ -551,6 +592,7 @@ void EndcordPlugin::restartRuntime()
 
     startBridgeServer();
     startWorker();
+    startManagedBot();
 }
 
 void EndcordPlugin::clearQueue()
@@ -665,6 +707,105 @@ void EndcordPlugin::stopBridgeServer()
     }
 
     bridge_server_.reset();
+}
+
+void EndcordPlugin::startManagedBot()
+{
+    stopManagedBot();
+
+    if (!config_.enabled || !config_.managed_bot.enabled) {
+        return;
+    }
+
+    const auto executable_path = expandManagedBotPath(config_.managed_bot.executable_path);
+    const auto config_path = expandManagedBotPath(config_.managed_bot.config_path);
+    const auto working_directory = expandManagedBotPath(config_.managed_bot.working_directory);
+    const auto log_path = expandManagedBotPath(config_.managed_bot.log_path);
+
+    if (!fs::exists(executable_path)) {
+        getLogger().info("Managed bot is enabled but '{}' does not exist yet. Run the bot bootstrap step first.",
+                         executable_path.string());
+        return;
+    }
+    if (!fs::exists(config_path)) {
+        getLogger().info("Managed bot is enabled but '{}' does not exist yet. Run the bot bootstrap step first.",
+                         config_path.string());
+        return;
+    }
+
+    std::error_code ec;
+    fs::create_directories(working_directory, ec);
+    fs::create_directories(log_path.parent_path(), ec);
+
+    const pid_t child_pid = fork();
+    if (child_pid < 0) {
+        getLogger().error("Failed to fork managed bot process.");
+        return;
+    }
+
+    if (child_pid == 0) {
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (getppid() == 1) {
+            _exit(1);
+        }
+
+        setsid();
+
+        const int log_fd = open(log_path.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0644);
+        if (log_fd >= 0) {
+            dup2(log_fd, STDOUT_FILENO);
+            dup2(log_fd, STDERR_FILENO);
+            close(log_fd);
+        }
+
+        const int null_fd = open("/dev/null", O_RDONLY);
+        if (null_fd >= 0) {
+            dup2(null_fd, STDIN_FILENO);
+            close(null_fd);
+        }
+
+        if (!working_directory.empty()) {
+            chdir(working_directory.c_str());
+        }
+
+        const std::string executable = executable_path.string();
+        const std::string config_arg = config_path.string();
+        char *const argv[] = {
+            const_cast<char *>(executable.c_str()),
+            const_cast<char *>(config_arg.c_str()),
+            nullptr,
+        };
+        execv(executable.c_str(), argv);
+        _exit(127);
+    }
+
+    managed_bot_pid_ = static_cast<int>(child_pid);
+    getLogger().info("Started managed bot process {} using '{}'.", managed_bot_pid_, executable_path.string());
+}
+
+void EndcordPlugin::stopManagedBot()
+{
+    if (managed_bot_pid_ <= 0) {
+        return;
+    }
+
+    const pid_t child_pid = static_cast<pid_t>(managed_bot_pid_);
+    kill(-child_pid, SIGTERM);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(config_.managed_bot.stop_timeout_ms);
+    int status = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto result = waitpid(child_pid, &status, WNOHANG);
+        if (result == child_pid || (result < 0 && errno == ECHILD)) {
+            managed_bot_pid_ = -1;
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    kill(-child_pid, SIGKILL);
+    waitpid(child_pid, &status, 0);
+    managed_bot_pid_ = -1;
 }
 
 void EndcordPlugin::workerLoop()
@@ -850,6 +991,8 @@ void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
     sender.sendMessage("Bridge HTTP server running: {}", (bridge_server_ && bridge_server_->is_running()) ? "yes" : "no");
     sender.sendMessage("Bot bridge enabled: {}", config_.bot_bridge.enabled ? "yes" : "no");
     sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
+    sender.sendMessage("Managed bot enabled: {}", config_.managed_bot.enabled ? "yes" : "no");
+    sender.sendMessage("Managed bot running: {}", isManagedBotRunning() ? "yes" : "no");
 }
 
 void EndcordPlugin::enqueueWebhookPayload(WebhookJob job)
@@ -1133,7 +1276,9 @@ void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::
                           {"bot_system_messages_enabled", config_.bot_bridge.outbound_system_messages_enabled},
                           {"avatar_enabled", config_.avatar.enabled},
                           {"avatar_provider", config_.avatar.provider},
-                          {"bot_bridge_enabled", config_.bot_bridge.enabled}})
+                          {"bot_bridge_enabled", config_.bot_bridge.enabled},
+                          {"managed_bot_enabled", config_.managed_bot.enabled},
+                          {"managed_bot_running", isManagedBotRunning()}})
                         .dump(),
                     "application/json");
 }
@@ -1234,7 +1379,9 @@ void EndcordPlugin::handleBotBridgeHealth(const httplib::Request &req, httplib::
                           {"bridge_server_running", bridge_server_ && bridge_server_->is_running()},
                           {"webhook_worker_running", worker_thread_.joinable()},
                           {"webhook_configured", webhook_target_.has_value()},
-                          {"webhook_queue_depth", queue_depth}})
+                          {"webhook_queue_depth", queue_depth},
+                          {"managed_bot_enabled", config_.managed_bot.enabled},
+                          {"managed_bot_running", isManagedBotRunning()}})
                         .dump(),
                     "application/json");
 }
@@ -1458,6 +1605,26 @@ std::string EndcordPlugin::normalizeSecret(std::string value)
     value.erase(std::find_if(value.rbegin(), value.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(),
                 value.end());
     return value;
+}
+
+std::filesystem::path EndcordPlugin::expandManagedBotPath(const std::string &value) const
+{
+    std::string expanded = value;
+    const auto plugin_data = getDataFolder().string();
+    auto position = expanded.find("{plugin_data}");
+    while (position != std::string::npos) {
+        expanded.replace(position, std::string("{plugin_data}").size(), plugin_data);
+        position = expanded.find("{plugin_data}", position + plugin_data.size());
+    }
+    return fs::path(expanded).lexically_normal();
+}
+
+bool EndcordPlugin::isManagedBotRunning() const
+{
+    if (managed_bot_pid_ <= 0) {
+        return false;
+    }
+    return kill(static_cast<pid_t>(managed_bot_pid_), 0) == 0;
 }
 
 bool EndcordPlugin::isLoopbackAddress(const std::string &host)

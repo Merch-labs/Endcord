@@ -11,7 +11,8 @@ This bot is responsible for:
 
 The normal runtime model is simple:
 
-- keep the bot in the same local runtime environment as Endstone
+- bootstrap the bot into `plugins/endcord/bot/`
+- let Endcord start and stop it with the server
 - keep `plugin_bridge.base_url` on `127.0.0.1`
 - let the bot auto-create the outbound webhook
 
@@ -20,7 +21,6 @@ The normal runtime model is simple:
 ```bash
 cd bot
 ./scripts/bootstrap-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
-./scripts/run-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
 ```
 
 Before running, fill in:
@@ -44,6 +44,8 @@ Schema:
   - usually `http://127.0.0.1:8089/endcord/api`
 - `bot_bridge.shared_secret` in the plugin config
   - the bot reads it automatically from `plugins/endcord/config.json`
+- `managed_bot.enabled` in the plugin config
+  - lets the plugin start and stop the bot automatically
 - `discord.auto_create_webhook`
   - lets the bot provision the webhook automatically
 - `plugin_bridge.configure_webhook_on_startup`
@@ -149,12 +151,12 @@ Optional bot-owned lifecycle delivery:
 - `logging.log_relay_successes`
 - `logging.log_presence_updates`
 
-## Service Setup
+## Manual Or Service-Based Runtime
 
-If you want the bot to start automatically:
+If you do not want the plugin to manage the bot process:
 
-- adapt [endcord-bot.service.example](systemd/endcord-bot.service.example)
-- enable it with `systemctl`
+- run [run-local-runtime.sh](scripts/run-local-runtime.sh) manually
+- or adapt [endcord-bot.service.example](systemd/endcord-bot.service.example)
 
 ## Local Checks
 
