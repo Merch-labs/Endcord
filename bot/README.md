@@ -34,8 +34,8 @@ Optional but common:
 
 - `discord.outbound_channel_id`
 - `discord.guild_id`
-- `discord.command_role_ids`
-- `discord.status_role_ids`
+- `slash_commands.command.role_ids`
+- `slash_commands.status.role_ids`
 
 Schema:
 - [config.schema.json](config.schema.json)
@@ -78,10 +78,28 @@ Filtering:
 ## Slash Commands
 
 - `/status`
+- `/players`
+- `/ping`
 - `/command command:<text>`
-- `/reloadbridge`
+- `/configreload`
 
 Role restrictions:
+
+- `slash_commands.status.role_ids`
+- `slash_commands.players.role_ids`
+- `slash_commands.ping.role_ids`
+- `slash_commands.command.role_ids`
+- `slash_commands.configreload.role_ids`
+
+Per-command toggles:
+
+- `slash_commands.status.enabled`
+- `slash_commands.players.enabled`
+- `slash_commands.ping.enabled`
+- `slash_commands.command.enabled`
+- `slash_commands.configreload.enabled`
+
+Legacy fallback role lists still load if you already use them:
 
 - `discord.command_role_ids`
 - `discord.status_role_ids`

@@ -47,6 +47,17 @@ class RelayConfig:
 class SlashCommandConfig:
     enabled: bool
     ephemeral_responses: bool
+    status: "SlashCommandRuleConfig"
+    command: "SlashCommandRuleConfig"
+    players: "SlashCommandRuleConfig"
+    ping: "SlashCommandRuleConfig"
+    configreload: "SlashCommandRuleConfig"
+
+
+@dataclass(slots=True)
+class SlashCommandRuleConfig:
+    enabled: bool
+    role_ids: list[int]
 
 
 @dataclass(slots=True)
@@ -101,6 +112,13 @@ class BotConfig:
         logging_cfg = data.get("logging", {})
         system_cfg = data.get("system_messages", {})
 
+        def build_command_rule(name: str, fallback_role_ids: list[int]) -> SlashCommandRuleConfig:
+            command_cfg = slash_cfg.get(name, {})
+            return SlashCommandRuleConfig(
+                enabled=bool(command_cfg.get("enabled", True)),
+                role_ids=[int(x) for x in command_cfg.get("role_ids", fallback_role_ids)],
+            )
+
         config = BotConfig(
             discord=DiscordConfig(
                 token=discord_cfg["token"],
@@ -138,6 +156,13 @@ class BotConfig:
             slash_commands=SlashCommandConfig(
                 enabled=bool(slash_cfg.get("enabled", True)),
                 ephemeral_responses=bool(slash_cfg.get("ephemeral_responses", True)),
+                status=build_command_rule("status", [int(x) for x in discord_cfg.get("status_role_ids", [])]),
+                command=build_command_rule("command", [int(x) for x in discord_cfg.get("command_role_ids", [])]),
+                players=build_command_rule("players", [int(x) for x in discord_cfg.get("status_role_ids", [])]),
+                ping=build_command_rule("ping", [int(x) for x in discord_cfg.get("status_role_ids", [])]),
+                configreload=build_command_rule(
+                    "configreload", [int(x) for x in discord_cfg.get("command_role_ids", [])]
+                ),
             ),
             presence=PresenceConfig(
                 enabled=bool(presence_cfg.get("enabled", True)),

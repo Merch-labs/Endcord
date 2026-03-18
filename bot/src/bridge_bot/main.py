@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -235,71 +236,136 @@ class EndcordBot(discord.Client):
         if not self.config.slash_commands.enabled:
             return
 
-        @self.tree.command(name="status", description="Show the current Endcord bridge status.")
-        async def status(interaction: discord.Interaction) -> None:
-            if not self._is_authorized(interaction, self.config.discord.status_role_ids):
-                await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
-                return
+        if self.config.slash_commands.status.enabled:
+            @self.tree.command(name="status", description="Show the current Endcord bridge status.")
+            async def status(interaction: discord.Interaction) -> None:
+                if not self._is_authorized(interaction, self.config.slash_commands.status.role_ids):
+                    await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
+                    return
 
-            await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
-            try:
-                status = await self.bridge.get_status()
-            except Exception as exc:  # noqa: BLE001
-                await interaction.followup.send(f"Status request failed: {exc}", ephemeral=True)
-                return
+                await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
+                try:
+                    status = await self.bridge.get_status()
+                except Exception as exc:  # noqa: BLE001
+                    await interaction.followup.send(f"Status request failed: {exc}", ephemeral=True)
+                    return
 
-            lines = [
-                f"Server: `{status.get('server_name', 'unknown')}`",
-                f"Minecraft: `{status.get('minecraft_version', 'unknown')}`",
-                f"Online players: `{status.get('online_players', 0)}`",
-                f"Webhook queue depth: `{status.get('webhook_queue_depth', 0)}`",
-                f"Avatar provider: `{status.get('avatar_provider') or '<disabled>'}`",
-            ]
-            await interaction.followup.send("\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses)
+                lines = [
+                    f"Server: `{status.get('server_name', 'unknown')}`",
+                    f"Minecraft: `{status.get('minecraft_version', 'unknown')}`",
+                    f"Online players: `{status.get('online_players', 0)}`",
+                    f"Webhook queue depth: `{status.get('webhook_queue_depth', 0)}`",
+                    f"Avatar provider: `{status.get('avatar_provider') or '<disabled>'}`",
+                ]
+                await interaction.followup.send(
+                    "\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses
+                )
 
-        @self.tree.command(name="command", description="Execute a server command through the bridge.")
-        @app_commands.describe(command="Command to execute without the leading slash.")
-        async def command(interaction: discord.Interaction, command: str) -> None:
-            if not self._is_authorized(interaction, self.config.discord.command_role_ids):
-                await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
-                return
+        if self.config.slash_commands.players.enabled:
+            @self.tree.command(name="players", description="Show the players currently online.")
+            async def players(interaction: discord.Interaction) -> None:
+                if not self._is_authorized(interaction, self.config.slash_commands.players.role_ids):
+                    await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
+                    return
 
-            await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
-            try:
-                result = await self.bridge.post_command(actor_name=interaction.user.display_name, command=command)
-            except Exception as exc:  # noqa: BLE001
-                await interaction.followup.send(f"Command failed: {exc}", ephemeral=True)
-                return
+                await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
+                try:
+                    status = await self.bridge.get_status()
+                except Exception as exc:  # noqa: BLE001
+                    await interaction.followup.send(f"Player list request failed: {exc}", ephemeral=True)
+                    return
 
-            output = result.get("output", [])
-            errors = result.get("errors", [])
-            lines = [f"Dispatched: `{result.get('dispatched', False)}`"]
-            if output:
-                lines.append("Output:")
-                lines.extend(f"- {line}" for line in output[:10])
-            if errors:
-                lines.append("Errors:")
-                lines.extend(f"- {line}" for line in errors[:10])
+                player_names = status.get("online_player_names", [])
+                if not isinstance(player_names, list):
+                    player_names = []
+                player_names = [str(name) for name in player_names[:50]]
+                player_count = int(status.get("online_players", len(player_names)))
 
-            response_text = "\n".join(lines)
-            if len(response_text) > 1800:
-                response_text = response_text[:1797] + "..."
-            await interaction.followup.send(response_text, ephemeral=self.config.slash_commands.ephemeral_responses)
+                if player_names:
+                    lines = [f"Online players: `{player_count}`", "Players:"]
+                    lines.extend(f"- {name}" for name in player_names)
+                else:
+                    lines = [f"Online players: `{player_count}`", "Nobody is online right now."]
 
-        @self.tree.command(name="reloadbridge", description="Reload the Endcord plugin configuration.")
-        async def reloadbridge(interaction: discord.Interaction) -> None:
-            if not self._is_authorized(interaction, self.config.discord.command_role_ids):
-                await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
-                return
+                await interaction.followup.send(
+                    "\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses
+                )
 
-            await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
-            try:
-                await self.bridge.post_command(actor_name=interaction.user.display_name, command="endcord reload")
-            except Exception as exc:  # noqa: BLE001
-                await interaction.followup.send(f"Reload failed: {exc}", ephemeral=True)
-                return
+        if self.config.slash_commands.ping.enabled:
+            @self.tree.command(name="ping", description="Check the Discord bot and bridge response time.")
+            async def ping(interaction: discord.Interaction) -> None:
+                if not self._is_authorized(interaction, self.config.slash_commands.ping.role_ids):
+                    await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
+                    return
 
-            await interaction.followup.send("Bridge reload command sent.", ephemeral=self.config.slash_commands.ephemeral_responses)
+                await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
+                try:
+                    started_at = time.perf_counter()
+                    status = await self.bridge.get_status()
+                    bridge_latency_ms = int((time.perf_counter() - started_at) * 1000)
+                except Exception as exc:  # noqa: BLE001
+                    await interaction.followup.send(f"Ping failed: {exc}", ephemeral=True)
+                    return
+
+                gateway_latency_ms = int(self.latency * 1000) if self.latency == self.latency else 0
+                lines = [
+                    f"Gateway latency: `{gateway_latency_ms} ms`",
+                    f"Bridge latency: `{bridge_latency_ms} ms`",
+                    f"Server: `{status.get('server_name', 'unknown')}`",
+                ]
+                await interaction.followup.send(
+                    "\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses
+                )
+
+        if self.config.slash_commands.command.enabled:
+            @self.tree.command(name="command", description="Execute a server command through the bridge.")
+            @app_commands.describe(command="Command to execute without the leading slash.")
+            async def command(interaction: discord.Interaction, command: str) -> None:
+                if not self._is_authorized(interaction, self.config.slash_commands.command.role_ids):
+                    await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
+                    return
+
+                await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
+                try:
+                    result = await self.bridge.post_command(actor_name=interaction.user.display_name, command=command)
+                except Exception as exc:  # noqa: BLE001
+                    await interaction.followup.send(f"Command failed: {exc}", ephemeral=True)
+                    return
+
+                output = result.get("output", [])
+                errors = result.get("errors", [])
+                lines = [f"Dispatched: `{result.get('dispatched', False)}`"]
+                if output:
+                    lines.append("Output:")
+                    lines.extend(f"- {line}" for line in output[:10])
+                if errors:
+                    lines.append("Errors:")
+                    lines.extend(f"- {line}" for line in errors[:10])
+
+                response_text = "\n".join(lines)
+                if len(response_text) > 1800:
+                    response_text = response_text[:1797] + "..."
+                await interaction.followup.send(
+                    response_text, ephemeral=self.config.slash_commands.ephemeral_responses
+                )
+
+        if self.config.slash_commands.configreload.enabled:
+            @self.tree.command(name="configreload", description="Reload the Endcord plugin configuration.")
+            async def configreload(interaction: discord.Interaction) -> None:
+                if not self._is_authorized(interaction, self.config.slash_commands.configreload.role_ids):
+                    await interaction.response.send_message("You are not allowed to use this command.", ephemeral=True)
+                    return
+
+                await interaction.response.defer(ephemeral=self.config.slash_commands.ephemeral_responses)
+                try:
+                    await self.bridge.post_command(actor_name=interaction.user.display_name, command="endcord reload")
+                except Exception as exc:  # noqa: BLE001
+                    await interaction.followup.send(f"Reload failed: {exc}", ephemeral=True)
+                    return
+
+                await interaction.followup.send(
+                    "Bridge reload command sent.", ephemeral=self.config.slash_commands.ephemeral_responses
+                )
 
     def _is_authorized(self, interaction: discord.Interaction, role_ids: list[int]) -> bool:
         if interaction.user.guild_permissions.administrator:

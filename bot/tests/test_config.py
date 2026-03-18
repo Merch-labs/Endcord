@@ -56,6 +56,9 @@ class BotConfigTests(unittest.TestCase):
         self.assertEqual(config.discord.relay_channel_ids, [123])
         self.assertTrue(config.discord.auto_create_webhook)
         self.assertEqual(config.plugin_bridge.request_max_retries, 3)
+        self.assertTrue(config.slash_commands.status.enabled)
+        self.assertEqual(config.slash_commands.players.role_ids, [])
+        self.assertEqual(config.slash_commands.command.role_ids, [])
 
     def test_requires_channel_when_guild_is_derived(self) -> None:
         path = self.write_config(
@@ -117,6 +120,89 @@ class BotConfigTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "presence.status"):
             BotConfig.load(path)
+
+    def test_loads_per_command_slash_command_settings(self) -> None:
+        config = BotConfig.load(
+            self.write_config(
+                {
+                    "discord": {
+                        "token": "token",
+                        "guild_id": 1,
+                        "relay_channel_ids": [123],
+                        "outbound_channel_id": 0,
+                        "command_role_ids": [1001],
+                        "status_role_ids": [1002],
+                        "relay_to_game_enabled": True,
+                        "sync_commands_globally": False,
+                        "auto_create_webhook": True,
+                        "webhook_name": "Endcord",
+                    },
+                    "plugin_bridge": {
+                        "base_url": "http://127.0.0.1:8089/endcord/api",
+                        "shared_secret": "secret",
+                        "request_timeout_seconds": 10,
+                        "configure_webhook_on_startup": True,
+                        "request_max_retries": 3,
+                        "request_retry_base_seconds": 1.5,
+                        "request_retry_max_seconds": 15.0,
+                    },
+                    "slash_commands": {
+                        "enabled": True,
+                        "ephemeral_responses": False,
+                        "status": {"enabled": True, "role_ids": [2001]},
+                        "command": {"enabled": False, "role_ids": [2002]},
+                        "players": {"enabled": True, "role_ids": [2003]},
+                        "ping": {"enabled": True, "role_ids": [2004]},
+                        "configreload": {"enabled": True, "role_ids": [2005]},
+                    },
+                }
+            )
+        )
+
+        self.assertFalse(config.slash_commands.ephemeral_responses)
+        self.assertEqual(config.slash_commands.status.role_ids, [2001])
+        self.assertFalse(config.slash_commands.command.enabled)
+        self.assertEqual(config.slash_commands.players.role_ids, [2003])
+        self.assertEqual(config.slash_commands.ping.role_ids, [2004])
+        self.assertEqual(config.slash_commands.configreload.role_ids, [2005])
+
+    def test_slash_command_roles_fall_back_to_legacy_lists(self) -> None:
+        config = BotConfig.load(
+            self.write_config(
+                {
+                    "discord": {
+                        "token": "token",
+                        "guild_id": 1,
+                        "relay_channel_ids": [123],
+                        "outbound_channel_id": 0,
+                        "command_role_ids": [3001],
+                        "status_role_ids": [3002],
+                        "relay_to_game_enabled": True,
+                        "sync_commands_globally": False,
+                        "auto_create_webhook": True,
+                        "webhook_name": "Endcord",
+                    },
+                    "plugin_bridge": {
+                        "base_url": "http://127.0.0.1:8089/endcord/api",
+                        "shared_secret": "secret",
+                        "request_timeout_seconds": 10,
+                        "configure_webhook_on_startup": True,
+                        "request_max_retries": 3,
+                        "request_retry_base_seconds": 1.5,
+                        "request_retry_max_seconds": 15.0,
+                    },
+                    "slash_commands": {
+                        "enabled": True,
+                        "ephemeral_responses": True
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(config.slash_commands.status.role_ids, [3002])
+        self.assertEqual(config.slash_commands.command.role_ids, [3001])
+        self.assertEqual(config.slash_commands.ping.role_ids, [3002])
+        self.assertEqual(config.slash_commands.configreload.role_ids, [3001])
 
 
 if __name__ == "__main__":

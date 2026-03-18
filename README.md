@@ -132,8 +132,10 @@ Once both pieces are running:
 - join, quit, and death relays
 - slash commands:
   - `/status`
+  - `/players`
+  - `/ping`
   - `/command`
-  - `/reloadbridge`
+  - `/configreload`
 
 ## Common Things People Change
 
@@ -203,6 +205,22 @@ Optional bot-owned lifecycle delivery:
 - `system_messages.channel_id`
 - `system_messages.message_template`
 
+### Turn slash commands on or off, or restrict them
+
+Bot slash command settings:
+
+- `slash_commands.enabled`
+- `slash_commands.status.enabled`
+- `slash_commands.players.enabled`
+- `slash_commands.ping.enabled`
+- `slash_commands.command.enabled`
+- `slash_commands.configreload.enabled`
+- `slash_commands.status.role_ids`
+- `slash_commands.players.role_ids`
+- `slash_commands.ping.role_ids`
+- `slash_commands.command.role_ids`
+- `slash_commands.configreload.role_ids`
+
 ## Troubleshooting
 
 ### Minecraft -> Discord works, but Discord -> Minecraft does not
@@ -257,8 +275,9 @@ These are useful, but most people do not need to touch them on day one.
 - `plugin_bridge.request_max_retries`
 - `plugin_bridge.request_retry_base_seconds`
 - `plugin_bridge.request_retry_max_seconds`
-- `discord.command_role_ids`
-- `discord.status_role_ids`
+- legacy fallback role lists:
+  - `discord.command_role_ids`
+  - `discord.status_role_ids`
 - `discord.outbound_channel_id`
 
 ## Build From Source

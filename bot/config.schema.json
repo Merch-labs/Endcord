@@ -22,8 +22,6 @@
         "guild_id",
         "relay_channel_ids",
         "outbound_channel_id",
-        "command_role_ids",
-        "status_role_ids",
         "relay_to_game_enabled",
         "sync_commands_globally",
         "auto_create_webhook",
@@ -168,7 +166,12 @@
       "additionalProperties": false,
       "required": [
         "enabled",
-        "ephemeral_responses"
+        "ephemeral_responses",
+        "status",
+        "command",
+        "players",
+        "ping",
+        "configreload"
       ],
       "properties": {
         "enabled": {
@@ -176,6 +179,21 @@
         },
         "ephemeral_responses": {
           "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/slashCommandRule"
+        },
+        "command": {
+          "$ref": "#/$defs/slashCommandRule"
+        },
+        "players": {
+          "$ref": "#/$defs/slashCommandRule"
+        },
+        "ping": {
+          "$ref": "#/$defs/slashCommandRule"
+        },
+        "configreload": {
+          "$ref": "#/$defs/slashCommandRule"
         }
       }
     },
@@ -299,6 +317,28 @@
         "max_messages_per_poll": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slashCommandRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "role_ids"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "role_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
       }
     }
