@@ -35,6 +35,10 @@ class PluginBridgeClient:
         channel_name: str,
         guild_name: str,
         message_url: str,
+        author_id: str,
+        channel_id: str,
+        guild_id: str,
+        message_id: str,
     ) -> dict[str, Any]:
         payload = {
             "author": author,
@@ -42,6 +46,10 @@ class PluginBridgeClient:
             "channel_name": channel_name,
             "guild_name": guild_name,
             "message_url": message_url,
+            "author_id": author_id,
+            "channel_id": channel_id,
+            "guild_id": guild_id,
+            "message_id": message_id,
         }
         return await self._request("POST", "/chat", payload)
 
@@ -211,6 +219,15 @@ class EndcordBot(discord.Client):
                 channel=message.channel.name,
                 guild=message.guild.name,
                 message_url=message.jump_url,
+                author_id=str(message.author.id),
+                channel_id=str(message.channel.id),
+                guild_id=str(message.guild.id),
+                message_id=str(message.id),
+                attachments_count=len(message.attachments),
+                content_raw=message.content,
+                author_username=message.author.name,
+                author_global_name=message.author.global_name or "",
+                channel_mention=getattr(message.channel, "mention", ""),
             ),
         ).strip()
         if not relay_content:
@@ -226,6 +243,10 @@ class EndcordBot(discord.Client):
                 channel_name=message.channel.name,
                 guild_name=message.guild.name,
                 message_url=message.jump_url,
+                author_id=str(message.author.id),
+                channel_id=str(message.channel.id),
+                guild_id=str(message.guild.id),
+                message_id=str(message.id),
             )
             if self.config.logging.log_relay_successes:
                 LOGGER.info("Relayed Discord message %s from #%s into Minecraft.", message.id, message.channel.name)
@@ -459,13 +480,7 @@ class EndcordBot(discord.Client):
         guild = self.get_guild(self.config.discord.guild_id)
         activity_text = self._apply_template(
             template_text,
-            {
-                "{server_name}": str(status_payload.get("server_name", "Unknown Server")),
-                "{minecraft_version}": str(status_payload.get("minecraft_version", "unknown")),
-                "{online_players}": str(status_payload.get("online_players", 0)),
-                "{webhook_queue_depth}": str(status_payload.get("webhook_queue_depth", 0)),
-                "{guild_name}": guild.name if guild is not None else "",
-            },
+            self._build_presence_replacements(status_payload, guild),
         ).strip()
         if not activity_text:
             activity_text = self.config.presence.fallback_text or "Endcord online"
@@ -529,11 +544,7 @@ class EndcordBot(discord.Client):
         for payload in messages[: self.config.system_messages.max_messages_per_poll]:
             content = self._apply_template(
                 self.config.system_messages.message_template,
-                {
-                    "{content}": str(payload.get("content", "")),
-                    "{event}": str(payload.get("event", "")),
-                    "{player_name}": str(payload.get("player_name", "")),
-                },
+                self._build_system_message_replacements(payload),
             ).strip()
             if not content:
                 continue
@@ -645,15 +656,87 @@ class EndcordBot(discord.Client):
         channel: str,
         guild: str,
         message_url: str,
+        author_id: str = "",
+        channel_id: str = "",
+        guild_id: str = "",
+        message_id: str = "",
+        attachments_count: int = 0,
+        content_raw: str = "",
+        author_username: str = "",
+        author_global_name: str = "",
+        channel_mention: str = "",
     ) -> dict[str, str]:
         return {
             "{author}": author,
+            "{author_name}": author,
+            "{author_username}": author_username,
+            "{author_global_name}": author_global_name,
+            "{author_id}": author_id,
             "{content}": content,
+            "{content_raw}": content_raw or content,
+            "{content_length}": str(len(content)),
             "{attachments}": attachments,
+            "{attachments_count}": str(attachments_count),
             "{jump_url}": jump_url,
             "{channel}": channel,
+            "{channel_name}": channel,
+            "{channel_id}": channel_id,
+            "{channel_mention}": channel_mention,
             "{guild}": guild,
+            "{guild_name}": guild,
+            "{guild_id}": guild_id,
             "{message_url}": message_url,
+            "{message_id}": message_id,
+        }
+
+    @staticmethod
+    def _build_presence_replacements(status_payload: dict[str, Any], guild: discord.Guild | None) -> dict[str, str]:
+        online_player_names = status_payload.get("online_player_names", [])
+        if not isinstance(online_player_names, list):
+            online_player_names = []
+
+        def bool_text(value: Any) -> str:
+            return "true" if bool(value) else "false"
+
+        return {
+            "{server_name}": str(status_payload.get("server_name", "Unknown Server")),
+            "{minecraft_version}": str(status_payload.get("minecraft_version", "unknown")),
+            "{online_players}": str(status_payload.get("online_players", 0)),
+            "{online_player_names}": ", ".join(str(name) for name in online_player_names),
+            "{webhook_queue_depth}": str(status_payload.get("webhook_queue_depth", 0)),
+            "{system_message_queue_depth}": str(status_payload.get("system_message_queue_depth", 0)),
+            "{system_message_queue_max}": str(status_payload.get("system_message_queue_max", 0)),
+            "{webhook_configured}": bool_text(status_payload.get("webhook_configured", False)),
+            "{runtime_webhook_override_active}": bool_text(
+                status_payload.get("runtime_webhook_override_active", False)
+            ),
+            "{minecraft_to_discord_enabled}": bool_text(status_payload.get("minecraft_to_discord_enabled", False)),
+            "{discord_to_minecraft_enabled}": bool_text(status_payload.get("discord_to_minecraft_enabled", False)),
+            "{bot_system_messages_enabled}": bool_text(status_payload.get("bot_system_messages_enabled", False)),
+            "{avatar_enabled}": bool_text(status_payload.get("avatar_enabled", False)),
+            "{avatar_provider}": str(status_payload.get("avatar_provider", "")),
+            "{bot_bridge_enabled}": bool_text(status_payload.get("bot_bridge_enabled", False)),
+            "{managed_bot_enabled}": bool_text(status_payload.get("managed_bot_enabled", False)),
+            "{managed_bot_running}": bool_text(status_payload.get("managed_bot_running", False)),
+            "{guild_name}": guild.name if guild is not None else "",
+            "{guild_id}": str(guild.id) if guild is not None else "",
+        }
+
+    @staticmethod
+    def _build_system_message_replacements(payload: dict[str, Any]) -> dict[str, str]:
+        event_name = str(payload.get("event", ""))
+        player_name = str(payload.get("player_name", ""))
+        content = str(payload.get("content", ""))
+        return {
+            "{content}": content,
+            "{message}": content,
+            "{content_length}": str(len(content)),
+            "{event}": event_name,
+            "{event_name}": event_name,
+            "{event_upper}": event_name.upper(),
+            "{event_title}": event_name.title(),
+            "{player}": player_name,
+            "{player_name}": player_name,
         }
 
     @staticmethod

@@ -39,27 +39,56 @@ constexpr int kBridgePort = 8089;
 constexpr size_t kBridgeThreadCount = 4;
 
 ReplacementList makePlayerTemplateReplacements(const endstone::Player &player, const std::string &payload,
-                                               const std::string &event_name, const std::string &server_name)
+                                               const std::string &event_name, const std::string &server_name,
+                                               const std::string &minecraft_version, std::size_t online_players)
 {
     const auto &skin = player.getSkin();
+    const auto uuid = player.getUniqueId().str();
     return {{"{player}", player.getName()},
+            {"{player_name}", player.getName()},
+            {"{username}", player.getName()},
             {"{message}", payload},
+            {"{content}", payload},
             {"{event_message}", payload},
             {"{event}", event_name},
+            {"{event_name}", event_name},
             {"{skin_id}", skin.getId()},
-            {"{server}", server_name}};
+            {"{xuid}", player.getXuid()},
+            {"{uuid}", uuid},
+            {"{uuid_nodashes}", bridge_support::replaceAll(uuid, "-", "")},
+            {"{message_length}", std::to_string(payload.size())},
+            {"{server}", server_name},
+            {"{server_name}", server_name},
+            {"{minecraft_version}", minecraft_version},
+            {"{online_players}", std::to_string(online_players)}};
 }
 
 ReplacementList makeInboundChatTemplateReplacements(const std::string &author, const std::string &content,
                                                     const std::string &channel, const std::string &guild,
-                                                    const std::string &message_url, const std::string &server_name)
+                                                    const std::string &message_url, const std::string &server_name,
+                                                    const std::string &author_id, const std::string &channel_id,
+                                                    const std::string &guild_id, const std::string &message_id,
+                                                    const std::string &minecraft_version, std::size_t online_players)
 {
     return {{"{author}", author},
+            {"{author_name}", author},
+            {"{author_id}", author_id},
             {"{content}", content},
+            {"{message}", content},
+            {"{content_length}", std::to_string(content.size())},
             {"{channel}", channel},
+            {"{channel_name}", channel},
+            {"{channel_id}", channel_id},
             {"{guild}", guild},
+            {"{guild_name}", guild},
+            {"{guild_id}", guild_id},
             {"{message_url}", message_url},
-            {"{server}", server_name}};
+            {"{jump_url}", message_url},
+            {"{message_id}", message_id},
+            {"{server}", server_name},
+            {"{server_name}", server_name},
+            {"{minecraft_version}", minecraft_version},
+            {"{online_players}", std::to_string(online_players)}};
 }
 }  // namespace
 
@@ -860,7 +889,8 @@ void EndcordPlugin::forwardChatToDiscord(const endstone::Player &player, const s
     }
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
-    const auto replacements = makePlayerTemplateReplacements(player, message, "chat", getServer().getName());
+    const auto replacements = makePlayerTemplateReplacements(
+        player, message, "chat", getServer().getName(), getServer().getMinecraftVersion(), getServer().getOnlinePlayers().size());
     auto username = bridge_support::applyTemplate(config_.discord.username_template, replacements);
     auto content = bridge_support::applyTemplate(config_.discord.content_template, replacements);
 
@@ -879,7 +909,9 @@ void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &playe
         return;
     }
 
-    const auto replacements = makePlayerTemplateReplacements(player, event_message, event_name, getServer().getName());
+    const auto replacements = makePlayerTemplateReplacements(
+        player, event_message, event_name, getServer().getName(), getServer().getMinecraftVersion(),
+        getServer().getOnlinePlayers().size());
     auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
     auto content = bridge_support::applyTemplate(content_template, replacements);
 
@@ -1125,6 +1157,10 @@ void EndcordPlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Re
     const auto channel = body.value("channel_name", "discord");
     const auto guild = body.value("guild_name", "");
     const auto message_url = body.value("message_url", "");
+    const auto author_id = body.value("author_id", "");
+    const auto channel_id = body.value("channel_id", "");
+    const auto guild_id = body.value("guild_id", "");
+    const auto message_id = body.value("message_id", "");
 
     if (author.empty() || content.empty()) {
         res.status = 400;
@@ -1135,7 +1171,9 @@ void EndcordPlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Re
     content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
     const auto formatted = bridge_support::applyTemplate(
         config_.bot_bridge.inbound_chat_template,
-        makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, getServer().getName()));
+        makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, getServer().getName(),
+                                            author_id, channel_id, guild_id, message_id,
+                                            getServer().getMinecraftVersion(), getServer().getOnlinePlayers().size()));
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 

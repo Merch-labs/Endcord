@@ -153,11 +153,21 @@ Plugin-side formatting:
 - `managed_bot.enabled`
 - `managed_bot.log_path`
 
+Common plugin placeholders:
+
+- Outbound Minecraft -> Discord: `{player}`, `{player_name}`, `{username}`, `{message}`, `{content}`, `{event_message}`, `{event}`, `{event_name}`, `{skin_id}`, `{xuid}`, `{uuid}`, `{uuid_nodashes}`, `{message_length}`, `{server}`, `{server_name}`, `{minecraft_version}`, `{online_players}`
+- Inbound Discord -> Minecraft: `{author}`, `{author_name}`, `{author_id}`, `{content}`, `{message}`, `{content_length}`, `{channel}`, `{channel_name}`, `{channel_id}`, `{guild}`, `{guild_name}`, `{guild_id}`, `{message_url}`, `{jump_url}`, `{message_id}`, `{server}`, `{server_name}`, `{minecraft_version}`, `{online_players}`
+
 Bot-side formatting:
 
 - `relay.message_template`
 - `relay.attachment_template`
 - `relay.jump_url_template`
+
+Common bot placeholders:
+
+- Relay message templates: `{author}`, `{author_name}`, `{author_username}`, `{author_global_name}`, `{author_id}`, `{content}`, `{content_raw}`, `{content_length}`, `{attachments}`, `{attachments_count}`, `{jump_url}`, `{channel}`, `{channel_name}`, `{channel_id}`, `{channel_mention}`, `{guild}`, `{guild_name}`, `{guild_id}`, `{message_url}`, `{message_id}`
+- System message templates: `{content}`, `{message}`, `{content_length}`, `{event}`, `{event_name}`, `{event_upper}`, `{event_title}`, `{player}`, `{player_name}`
 
 ### Change avatar provider
 
@@ -200,6 +210,10 @@ Presence:
 - `presence.status`
 - `presence.activity_type`
 - `presence.activity_text`
+
+Useful presence placeholders:
+
+- `{server_name}`, `{minecraft_version}`, `{online_players}`, `{online_player_names}`, `{webhook_queue_depth}`, `{system_message_queue_depth}`, `{system_message_queue_max}`, `{webhook_configured}`, `{runtime_webhook_override_active}`, `{minecraft_to_discord_enabled}`, `{discord_to_minecraft_enabled}`, `{bot_system_messages_enabled}`, `{avatar_enabled}`, `{avatar_provider}`, `{bot_bridge_enabled}`, `{managed_bot_enabled}`, `{managed_bot_running}`, `{guild_name}`, `{guild_id}`
 
 Optional bot-owned lifecycle delivery:
 

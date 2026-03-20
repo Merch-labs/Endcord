@@ -69,6 +69,12 @@ Discord -> Minecraft formatting:
 - `relay.join_separator`
 - `relay.max_message_length`
 
+Supported placeholders in relay templates:
+
+- Message templates: `{author}`, `{author_name}`, `{author_username}`, `{author_global_name}`, `{author_id}`, `{content}`, `{content_raw}`, `{content_length}`, `{attachments}`, `{attachments_count}`, `{jump_url}`, `{channel}`, `{channel_name}`, `{channel_id}`, `{channel_mention}`, `{guild}`, `{guild_name}`, `{guild_id}`, `{message_url}`, `{message_id}`
+- Attachment templates: `{filename}`, `{url}`, `{content_type}`
+- Jump URL templates: `{url}`
+
 Filtering:
 
 - `relay.ignore_bot_messages`
@@ -130,8 +136,22 @@ Supported placeholders in `presence.activity_text`:
 - `{server_name}`
 - `{minecraft_version}`
 - `{online_players}`
+- `{online_player_names}`
 - `{webhook_queue_depth}`
+- `{system_message_queue_depth}`
+- `{system_message_queue_max}`
+- `{webhook_configured}`
+- `{runtime_webhook_override_active}`
+- `{minecraft_to_discord_enabled}`
+- `{discord_to_minecraft_enabled}`
+- `{bot_system_messages_enabled}`
+- `{avatar_enabled}`
+- `{avatar_provider}`
+- `{bot_bridge_enabled}`
+- `{managed_bot_enabled}`
+- `{managed_bot_running}`
 - `{guild_name}`
+- `{guild_id}`
 
 ## System Messages
 
@@ -143,6 +163,18 @@ Optional bot-owned lifecycle delivery:
 - `system_messages.max_messages_per_poll`
 - `system_messages.failure_backoff_seconds`
 - `system_messages.max_backoff_seconds`
+
+Supported placeholders in `system_messages.message_template`:
+
+- `{content}`
+- `{message}`
+- `{content_length}`
+- `{event}`
+- `{event_name}`
+- `{event_upper}`
+- `{event_title}`
+- `{player}`
+- `{player_name}`
 
 ## Logging
 
