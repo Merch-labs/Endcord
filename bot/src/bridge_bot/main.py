@@ -289,8 +289,14 @@ class EndcordBot(discord.Client):
 
                 lines = [
                     f"Server: `{status.get('server_name', 'unknown')}`",
+                    f"Server version: `{status.get('server_version', 'unknown')}`",
                     f"Minecraft: `{status.get('minecraft_version', 'unknown')}`",
-                    f"Online players: `{status.get('online_players', 0)}`",
+                    f"Protocol: `{status.get('protocol_version', 'unknown')}`",
+                    f"Online players: `{status.get('online_players', 0)}/{status.get('max_players', 0)}`",
+                    f"Slots free: `{status.get('player_slots_available', 0)}`",
+                    f"Utilization: `{status.get('player_utilization_percent', '0.0')}%`",
+                    f"Ports: `IPv4 {status.get('game_port', 0)} / IPv6 {status.get('game_port_v6', 0)}`",
+                    f"Online mode: `{status.get('online_mode', False)}`",
                     f"Webhook queue depth: `{status.get('webhook_queue_depth', 0)}`",
                     f"Avatar provider: `{status.get('avatar_provider') or '<disabled>'}`",
                 ]
@@ -365,6 +371,7 @@ class EndcordBot(discord.Client):
                     f"Gateway latency: `{gateway_latency_ms} ms`",
                     f"Bridge latency: `{bridge_latency_ms} ms`",
                     f"Server: `{status.get('server_name', 'unknown')}`",
+                    f"Players: `{status.get('online_players', 0)}/{status.get('max_players', 0)}`",
                 ]
                 await interaction.followup.send(
                     "\n".join(lines), ephemeral=self.config.slash_commands.ephemeral_responses
@@ -466,21 +473,27 @@ class EndcordBot(discord.Client):
     async def _refresh_presence(self) -> None:
         template_text = self.config.presence.fallback_text
         status_payload: dict[str, Any] = {}
+        bridge_latency_ms = 0
 
         try:
+            started_at = time.perf_counter()
             status_payload = await self.bridge.get_status()
+            bridge_latency_ms = int((time.perf_counter() - started_at) * 1000)
             if self.config.plugin_bridge.configure_webhook_on_startup and not status_payload.get("webhook_configured", False):
                 await self._ensure_webhook_binding()
+                started_at = time.perf_counter()
                 status_payload = await self.bridge.get_status()
+                bridge_latency_ms = int((time.perf_counter() - started_at) * 1000)
             template_text = self.config.presence.activity_text
         except Exception as exc:  # noqa: BLE001
             if self.config.logging.log_presence_updates:
                 LOGGER.warning("Presence status refresh fell back to fallback_text: %s", exc)
 
         guild = self.get_guild(self.config.discord.guild_id)
+        gateway_latency_ms = int(self.latency * 1000) if self.latency == self.latency else 0
         activity_text = self._apply_template(
             template_text,
-            self._build_presence_replacements(status_payload, guild),
+            self._build_presence_replacements(status_payload, guild, gateway_latency_ms, bridge_latency_ms),
         ).strip()
         if not activity_text:
             activity_text = self.config.presence.fallback_text or "Endcord online"
@@ -690,7 +703,12 @@ class EndcordBot(discord.Client):
         }
 
     @staticmethod
-    def _build_presence_replacements(status_payload: dict[str, Any], guild: discord.Guild | None) -> dict[str, str]:
+    def _build_presence_replacements(
+        status_payload: dict[str, Any],
+        guild: discord.Guild | None,
+        gateway_latency_ms: int,
+        bridge_latency_ms: int,
+    ) -> dict[str, str]:
         online_player_names = status_payload.get("online_player_names", [])
         if not isinstance(online_player_names, list):
             online_player_names = []
@@ -700,12 +718,22 @@ class EndcordBot(discord.Client):
 
         return {
             "{server_name}": str(status_payload.get("server_name", "Unknown Server")),
+            "{server_version}": str(status_payload.get("server_version", "unknown")),
             "{minecraft_version}": str(status_payload.get("minecraft_version", "unknown")),
+            "{protocol_version}": str(status_payload.get("protocol_version", 0)),
             "{online_players}": str(status_payload.get("online_players", 0)),
+            "{max_players}": str(status_payload.get("max_players", 0)),
+            "{player_slots_available}": str(status_payload.get("player_slots_available", 0)),
+            "{player_utilization_percent}": str(status_payload.get("player_utilization_percent", "0.0")),
             "{online_player_names}": ", ".join(str(name) for name in online_player_names),
+            "{game_port}": str(status_payload.get("game_port", 0)),
+            "{game_port_v6}": str(status_payload.get("game_port_v6", 0)),
+            "{online_mode}": bool_text(status_payload.get("online_mode", False)),
             "{webhook_queue_depth}": str(status_payload.get("webhook_queue_depth", 0)),
             "{system_message_queue_depth}": str(status_payload.get("system_message_queue_depth", 0)),
             "{system_message_queue_max}": str(status_payload.get("system_message_queue_max", 0)),
+            "{gateway_latency_ms}": str(gateway_latency_ms),
+            "{bridge_latency_ms}": str(bridge_latency_ms),
             "{webhook_configured}": bool_text(status_payload.get("webhook_configured", False)),
             "{runtime_webhook_override_active}": bool_text(
                 status_payload.get("runtime_webhook_override_active", False)

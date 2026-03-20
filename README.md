@@ -155,8 +155,8 @@ Plugin-side formatting:
 
 Common plugin placeholders:
 
-- Outbound Minecraft -> Discord: `{player}`, `{player_name}`, `{username}`, `{message}`, `{content}`, `{event_message}`, `{event}`, `{event_name}`, `{skin_id}`, `{xuid}`, `{uuid}`, `{uuid_nodashes}`, `{message_length}`, `{server}`, `{server_name}`, `{minecraft_version}`, `{online_players}`
-- Inbound Discord -> Minecraft: `{author}`, `{author_name}`, `{author_id}`, `{content}`, `{message}`, `{content_length}`, `{channel}`, `{channel_name}`, `{channel_id}`, `{guild}`, `{guild_name}`, `{guild_id}`, `{message_url}`, `{jump_url}`, `{message_id}`, `{server}`, `{server_name}`, `{minecraft_version}`, `{online_players}`
+- Outbound Minecraft -> Discord: `{player}`, `{player_name}`, `{username}`, `{message}`, `{content}`, `{event_message}`, `{event}`, `{event_name}`, `{skin_id}`, `{xuid}`, `{uuid}`, `{uuid_nodashes}`, `{message_length}`, `{server}`, `{server_name}`, `{server_version}`, `{minecraft_version}`, `{protocol_version}`, `{online_players}`, `{max_players}`, `{player_slots_available}`, `{player_utilization_percent}`, `{game_port}`, `{game_port_v6}`, `{online_mode}`
+- Inbound Discord -> Minecraft: `{author}`, `{author_name}`, `{author_id}`, `{content}`, `{message}`, `{content_length}`, `{channel}`, `{channel_name}`, `{channel_id}`, `{guild}`, `{guild_name}`, `{guild_id}`, `{message_url}`, `{jump_url}`, `{message_id}`, `{server}`, `{server_name}`, `{server_version}`, `{minecraft_version}`, `{protocol_version}`, `{online_players}`, `{max_players}`, `{player_slots_available}`, `{player_utilization_percent}`, `{game_port}`, `{game_port_v6}`, `{online_mode}`
 
 Bot-side formatting:
 
@@ -213,7 +213,7 @@ Presence:
 
 Useful presence placeholders:
 
-- `{server_name}`, `{minecraft_version}`, `{online_players}`, `{online_player_names}`, `{webhook_queue_depth}`, `{system_message_queue_depth}`, `{system_message_queue_max}`, `{webhook_configured}`, `{runtime_webhook_override_active}`, `{minecraft_to_discord_enabled}`, `{discord_to_minecraft_enabled}`, `{bot_system_messages_enabled}`, `{avatar_enabled}`, `{avatar_provider}`, `{bot_bridge_enabled}`, `{managed_bot_enabled}`, `{managed_bot_running}`, `{guild_name}`, `{guild_id}`
+- `{server_name}`, `{server_version}`, `{minecraft_version}`, `{protocol_version}`, `{online_players}`, `{max_players}`, `{player_slots_available}`, `{player_utilization_percent}`, `{online_player_names}`, `{game_port}`, `{game_port_v6}`, `{online_mode}`, `{gateway_latency_ms}`, `{bridge_latency_ms}`, `{webhook_queue_depth}`, `{system_message_queue_depth}`, `{system_message_queue_max}`, `{webhook_configured}`, `{runtime_webhook_override_active}`, `{minecraft_to_discord_enabled}`, `{discord_to_minecraft_enabled}`, `{bot_system_messages_enabled}`, `{avatar_enabled}`, `{avatar_provider}`, `{bot_bridge_enabled}`, `{managed_bot_enabled}`, `{managed_bot_running}`, `{guild_name}`, `{guild_id}`
 
 Optional bot-owned lifecycle delivery:
 

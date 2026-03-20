@@ -134,9 +134,19 @@ Useful presence settings:
 Supported placeholders in `presence.activity_text`:
 
 - `{server_name}`
+- `{server_version}`
 - `{minecraft_version}`
+- `{protocol_version}`
 - `{online_players}`
+- `{max_players}`
+- `{player_slots_available}`
+- `{player_utilization_percent}`
 - `{online_player_names}`
+- `{game_port}`
+- `{game_port_v6}`
+- `{online_mode}`
+- `{gateway_latency_ms}`
+- `{bridge_latency_ms}`
 - `{webhook_queue_depth}`
 - `{system_message_queue_depth}`
 - `{system_message_queue_max}`

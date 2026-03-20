@@ -38,9 +38,51 @@ constexpr auto kBridgeBindHost = "127.0.0.1";
 constexpr int kBridgePort = 8089;
 constexpr size_t kBridgeThreadCount = 4;
 
+struct ServerTemplateStats {
+    std::string server_name;
+    std::string server_version;
+    std::string minecraft_version;
+    int protocol_version = 0;
+    int max_players = 0;
+    int online_players = 0;
+    int player_slots_available = 0;
+    std::string player_utilization_percent = "0.0";
+    int game_port = 0;
+    int game_port_v6 = 0;
+    bool online_mode = false;
+};
+
+std::string formatUtilizationPercent(int online_players, int max_players)
+{
+    if (max_players <= 0) {
+        return "0.0";
+    }
+
+    const auto utilization = (static_cast<double>(online_players) / static_cast<double>(max_players)) * 100.0;
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << utilization;
+    return stream.str();
+}
+
+ServerTemplateStats collectServerTemplateStats(const endstone::Server &server)
+{
+    const auto online_players = static_cast<int>(server.getOnlinePlayers().size());
+    const auto max_players = std::max(server.getMaxPlayers(), 0);
+    return {.server_name = server.getName(),
+            .server_version = server.getVersion(),
+            .minecraft_version = server.getMinecraftVersion(),
+            .protocol_version = server.getProtocolVersion(),
+            .max_players = max_players,
+            .online_players = online_players,
+            .player_slots_available = std::max(max_players - online_players, 0),
+            .player_utilization_percent = formatUtilizationPercent(online_players, max_players),
+            .game_port = server.getPort(),
+            .game_port_v6 = server.getPortV6(),
+            .online_mode = server.getOnlineMode()};
+}
+
 ReplacementList makePlayerTemplateReplacements(const endstone::Player &player, const std::string &payload,
-                                               const std::string &event_name, const std::string &server_name,
-                                               const std::string &minecraft_version, std::size_t online_players)
+                                               const std::string &event_name, const ServerTemplateStats &stats)
 {
     const auto &skin = player.getSkin();
     const auto uuid = player.getUniqueId().str();
@@ -57,18 +99,25 @@ ReplacementList makePlayerTemplateReplacements(const endstone::Player &player, c
             {"{uuid}", uuid},
             {"{uuid_nodashes}", bridge_support::replaceAll(uuid, "-", "")},
             {"{message_length}", std::to_string(payload.size())},
-            {"{server}", server_name},
-            {"{server_name}", server_name},
-            {"{minecraft_version}", minecraft_version},
-            {"{online_players}", std::to_string(online_players)}};
+            {"{server}", stats.server_name},
+            {"{server_name}", stats.server_name},
+            {"{server_version}", stats.server_version},
+            {"{minecraft_version}", stats.minecraft_version},
+            {"{protocol_version}", std::to_string(stats.protocol_version)},
+            {"{online_players}", std::to_string(stats.online_players)},
+            {"{max_players}", std::to_string(stats.max_players)},
+            {"{player_slots_available}", std::to_string(stats.player_slots_available)},
+            {"{player_utilization_percent}", stats.player_utilization_percent},
+            {"{game_port}", std::to_string(stats.game_port)},
+            {"{game_port_v6}", std::to_string(stats.game_port_v6)},
+            {"{online_mode}", stats.online_mode ? "true" : "false"}};
 }
 
 ReplacementList makeInboundChatTemplateReplacements(const std::string &author, const std::string &content,
                                                     const std::string &channel, const std::string &guild,
-                                                    const std::string &message_url, const std::string &server_name,
-                                                    const std::string &author_id, const std::string &channel_id,
-                                                    const std::string &guild_id, const std::string &message_id,
-                                                    const std::string &minecraft_version, std::size_t online_players)
+                                                    const std::string &message_url, const std::string &author_id,
+                                                    const std::string &channel_id, const std::string &guild_id,
+                                                    const std::string &message_id, const ServerTemplateStats &stats)
 {
     return {{"{author}", author},
             {"{author_name}", author},
@@ -85,10 +134,18 @@ ReplacementList makeInboundChatTemplateReplacements(const std::string &author, c
             {"{message_url}", message_url},
             {"{jump_url}", message_url},
             {"{message_id}", message_id},
-            {"{server}", server_name},
-            {"{server_name}", server_name},
-            {"{minecraft_version}", minecraft_version},
-            {"{online_players}", std::to_string(online_players)}};
+            {"{server}", stats.server_name},
+            {"{server_name}", stats.server_name},
+            {"{server_version}", stats.server_version},
+            {"{minecraft_version}", stats.minecraft_version},
+            {"{protocol_version}", std::to_string(stats.protocol_version)},
+            {"{online_players}", std::to_string(stats.online_players)},
+            {"{max_players}", std::to_string(stats.max_players)},
+            {"{player_slots_available}", std::to_string(stats.player_slots_available)},
+            {"{player_utilization_percent}", stats.player_utilization_percent},
+            {"{game_port}", std::to_string(stats.game_port)},
+            {"{game_port_v6}", std::to_string(stats.game_port_v6)},
+            {"{online_mode}", stats.online_mode ? "true" : "false"}};
 }
 }  // namespace
 
@@ -889,8 +946,8 @@ void EndcordPlugin::forwardChatToDiscord(const endstone::Player &player, const s
     }
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
-    const auto replacements = makePlayerTemplateReplacements(
-        player, message, "chat", getServer().getName(), getServer().getMinecraftVersion(), getServer().getOnlinePlayers().size());
+    const auto server_stats = collectServerTemplateStats(getServer());
+    const auto replacements = makePlayerTemplateReplacements(player, message, "chat", server_stats);
     auto username = bridge_support::applyTemplate(config_.discord.username_template, replacements);
     auto content = bridge_support::applyTemplate(config_.discord.content_template, replacements);
 
@@ -909,9 +966,8 @@ void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &playe
         return;
     }
 
-    const auto replacements = makePlayerTemplateReplacements(
-        player, event_message, event_name, getServer().getName(), getServer().getMinecraftVersion(),
-        getServer().getOnlinePlayers().size());
+    const auto server_stats = collectServerTemplateStats(getServer());
+    const auto replacements = makePlayerTemplateReplacements(player, event_message, event_name, server_stats);
     auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
     auto content = bridge_support::applyTemplate(content_template, replacements);
 
@@ -995,6 +1051,7 @@ void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string 
 
 void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
 {
+    const auto server_stats = collectServerTemplateStats(getServer());
     std::size_t queue_depth = 0;
     {
         std::lock_guard lock(queue_mutex_);
@@ -1015,6 +1072,14 @@ void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
     sender.sendMessage("Webhook configured: {}", webhook_target_.has_value() ? "yes" : "no");
     sender.sendMessage("Runtime webhook override active: {}", runtime_webhook_override_active_ ? "yes" : "no");
     sender.sendMessage("Webhook queue depth: {}", queue_depth);
+    sender.sendMessage("Server version: {}", server_stats.server_version);
+    sender.sendMessage("Minecraft version: {}", server_stats.minecraft_version);
+    sender.sendMessage("Protocol version: {}", server_stats.protocol_version);
+    sender.sendMessage("Players: {}/{} ({}% used, {} slots free)", server_stats.online_players,
+                       server_stats.max_players, server_stats.player_utilization_percent,
+                       server_stats.player_slots_available);
+    sender.sendMessage("Ports: IPv4={} IPv6={}", server_stats.game_port, server_stats.game_port_v6);
+    sender.sendMessage("Online mode: {}", server_stats.online_mode ? "yes" : "no");
     sender.sendMessage("Bot system messages enabled: {}", config_.bot_bridge.outbound_system_messages_enabled ? "yes" : "no");
     sender.sendMessage("Bot system message queue depth: {}", system_message_queue_depth);
     sender.sendMessage("Bot system message queue max: {}", config_.bot_bridge.outbound_system_message_queue_max_size);
@@ -1169,11 +1234,11 @@ void EndcordPlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Re
     }
 
     content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
+    const auto server_stats = collectServerTemplateStats(getServer());
     const auto formatted = bridge_support::applyTemplate(
         config_.bot_bridge.inbound_chat_template,
-        makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, getServer().getName(),
-                                            author_id, channel_id, guild_id, message_id,
-                                            getServer().getMinecraftVersion(), getServer().getOnlinePlayers().size()));
+        makeInboundChatTemplateReplacements(author, content, channel, guild, message_url, author_id, channel_id,
+                                            guild_id, message_id, server_stats));
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 
@@ -1280,6 +1345,7 @@ void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::
 
     json online_player_names = json::array();
     const auto online_players = getServer().getOnlinePlayers();
+    const auto server_stats = collectServerTemplateStats(getServer());
     for (const auto *player : online_players) {
         if (player != nullptr) {
             online_player_names.push_back(player->getName());
@@ -1300,10 +1366,18 @@ void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::
 
     res.status = 200;
     res.set_content(json({{"ok", true},
-                          {"server_name", getServer().getName()},
-                          {"minecraft_version", getServer().getMinecraftVersion()},
-                          {"online_players", online_players.size()},
+                          {"server_name", server_stats.server_name},
+                          {"server_version", server_stats.server_version},
+                          {"minecraft_version", server_stats.minecraft_version},
+                          {"protocol_version", server_stats.protocol_version},
+                          {"online_players", server_stats.online_players},
+                          {"max_players", server_stats.max_players},
+                          {"player_slots_available", server_stats.player_slots_available},
+                          {"player_utilization_percent", server_stats.player_utilization_percent},
                           {"online_player_names", online_player_names},
+                          {"game_port", server_stats.game_port},
+                          {"game_port_v6", server_stats.game_port_v6},
+                          {"online_mode", server_stats.online_mode},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"runtime_webhook_override_active", runtime_webhook_override_active_},
                           {"webhook_queue_depth", queue_depth},
