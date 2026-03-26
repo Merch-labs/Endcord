@@ -99,13 +99,12 @@ private:
     struct LoggingOptions {
         bool log_filtered_events = false;
         bool log_webhook_successes = false;
-        bool log_http_requests = false;
         bool log_inbound_chat = false;
         bool log_remote_commands = true;
     };
 
     struct BridgeConfig {
-        int config_version = 8;
+        int config_version = 9;
         bool enabled = true;
         DiscordOptions discord{};
         RelayOptions relay{};
