@@ -11,6 +11,7 @@ RUN apt-get update \
         libc++-dev \
         libc++abi-dev \
         libssl-dev \
+        zlib1g-dev \
         make \
         ninja-build \
         pkg-config \
