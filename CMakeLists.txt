@@ -25,9 +25,22 @@ FetchContent_Declare(
     nlohmann_json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
 )
+set(BUILD_VOICE_SUPPORT OFF CACHE BOOL "" FORCE)
+set(DPP_BUILD_TEST OFF CACHE BOOL "" FORCE)
+set(DPP_INSTALL OFF CACHE BOOL "" FORCE)
+set(DPP_NO_CONAN ON CACHE BOOL "" FORCE)
+set(DPP_NO_VCPKG ON CACHE BOOL "" FORCE)
+set(DPP_NO_CORO ON CACHE BOOL "" FORCE)
+set(DPP_USE_EXTERNAL_JSON ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    dpp
+    GIT_REPOSITORY https://github.com/brainboxdotcc/DPP.git
+    GIT_TAG v10.1.4
+)
 FetchContent_MakeAvailable(endstone)
 FetchContent_MakeAvailable(cpp_httplib)
 FetchContent_MakeAvailable(nlohmann_json)
+FetchContent_MakeAvailable(dpp)
 
 add_library(bridge_support STATIC src/bridge_support.cpp)
 target_include_directories(bridge_support PUBLIC include)
@@ -36,9 +49,13 @@ add_library(endcord_bot_config STATIC src/endcord_bot_config.cpp)
 target_include_directories(endcord_bot_config PUBLIC include)
 target_link_libraries(endcord_bot_config PUBLIC nlohmann_json::nlohmann_json)
 
+add_library(endcord_integrated_bot STATIC src/endcord_integrated_bot.cpp)
+target_include_directories(endcord_integrated_bot PUBLIC include)
+target_link_libraries(endcord_integrated_bot PUBLIC endcord_bot_config dpp)
+
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support endcord_bot_config httplib::httplib nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support endcord_bot_config endcord_integrated_bot httplib::httplib nlohmann_json::nlohmann_json)
 
 add_executable(bridge_support_tests tests/bridge_support_test.cpp)
 target_link_libraries(bridge_support_tests PRIVATE bridge_support)
