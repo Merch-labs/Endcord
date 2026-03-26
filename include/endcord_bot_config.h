@@ -48,6 +48,16 @@ struct RelayRuntimeConfig {
     int max_message_length = 1800;
 };
 
+struct PluginBridgeRuntimeConfig {
+    std::string base_url = "http://127.0.0.1:8089/endcord/api";
+    std::string shared_secret;
+    int request_timeout_seconds = 10;
+    bool configure_webhook_on_startup = true;
+    int request_max_retries = 3;
+    double request_retry_base_seconds = 1.5;
+    double request_retry_max_seconds = 15.0;
+};
+
 struct PresenceRuntimeConfig {
     bool enabled = true;
     std::string status = "online";
@@ -77,6 +87,7 @@ struct SystemMessageRuntimeConfig {
 
 struct BotConfig {
     DiscordRuntimeConfig discord{};
+    PluginBridgeRuntimeConfig plugin_bridge{};
     RelayRuntimeConfig relay{};
     SlashCommandConfig slash_commands{};
     PresenceRuntimeConfig presence{};

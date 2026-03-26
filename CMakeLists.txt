@@ -32,6 +32,11 @@ set(DPP_NO_CONAN ON CACHE BOOL "" FORCE)
 set(DPP_NO_VCPKG ON CACHE BOOL "" FORCE)
 set(DPP_NO_CORO ON CACHE BOOL "" FORCE)
 set(DPP_USE_EXTERNAL_JSON ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(ZLIB_USE_STATIC_LIBS OFF CACHE BOOL "" FORCE)
+set(ZLIB_LIBRARY "/usr/lib/x86_64-linux-gnu/libz.so" CACHE FILEPATH "" FORCE)
+set(ZLIB_LIBRARY_RELEASE "/usr/lib/x86_64-linux-gnu/libz.so" CACHE FILEPATH "" FORCE)
+set(ZLIB_LIBRARIES "/usr/lib/x86_64-linux-gnu/libz.so" CACHE STRING "" FORCE)
 FetchContent_Declare(
     dpp
     GIT_REPOSITORY https://github.com/brainboxdotcc/DPP.git
@@ -51,7 +56,7 @@ target_link_libraries(endcord_bot_config PUBLIC nlohmann_json::nlohmann_json)
 
 add_library(endcord_integrated_bot STATIC src/endcord_integrated_bot.cpp)
 target_include_directories(endcord_integrated_bot PUBLIC include)
-target_link_libraries(endcord_integrated_bot PUBLIC endcord_bot_config dpp)
+target_link_libraries(endcord_integrated_bot PUBLIC bridge_support endcord_bot_config dpp nlohmann_json::nlohmann_json)
 
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <endstone/endstone.hpp>
+#include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <condition_variable>
@@ -21,6 +22,10 @@ struct Request;
 struct Response;
 class Server;
 class Client;
+}
+
+namespace endcord {
+class IntegratedBot;
 }
 
 class EndcordPlugin : public endstone::Plugin {
@@ -153,6 +158,8 @@ private:
     void stopWorker();
     void startBridgeServer();
     void stopBridgeServer();
+    void startIntegratedBot();
+    void stopIntegratedBot();
     void startManagedBot();
     void stopManagedBot();
     void workerLoop();
@@ -172,6 +179,14 @@ private:
     void handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res);
     void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
+    nlohmann::json buildBridgeStatusPayload() const;
+    nlohmann::json relayDiscordChat(const std::string &author, const std::string &content, const std::string &channel,
+                                    const std::string &guild, const std::string &message_url,
+                                    const std::string &author_id, const std::string &channel_id,
+                                    const std::string &guild_id, const std::string &message_id);
+    nlohmann::json executeDiscordCommand(const std::string &actor, const std::string &command_line);
+    nlohmann::json drainPendingSystemMessages();
+    nlohmann::json configureRuntimeWebhook(const std::string &webhook_url);
     bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
     bool isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const;
     void loadWebhookState();
@@ -212,5 +227,6 @@ private:
     std::chrono::steady_clock::time_point next_request_at_ = std::chrono::steady_clock::now();
     mutable std::mutex system_message_mutex_;
     std::deque<PendingSystemMessage> pending_system_messages_;
+    std::unique_ptr<endcord::IntegratedBot> integrated_bot_;
     int managed_bot_pid_ = -1;
 };
