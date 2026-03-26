@@ -181,8 +181,6 @@ ENDSTONE_PLUGIN(/*name=*/"endcord",
 EndcordPlugin::~EndcordPlugin()
 {
     stopIntegratedBot();
-    stopManagedBot();
-    stopBridgeServer();
     stopWorker();
 }
 
@@ -195,7 +193,6 @@ void EndcordPlugin::onEnable()
 {
     ensureDataFolder();
     writeDefaultConfigIfMissing();
-    writeDefaultBotConfigIfMissing();
     loadConfig();
     registerEvent(&EndcordPlugin::onPlayerChat, *this);
     registerEvent(&EndcordPlugin::onPlayerJoin, *this);
@@ -209,8 +206,6 @@ void EndcordPlugin::onEnable()
 void EndcordPlugin::onDisable()
 {
     stopIntegratedBot();
-    stopManagedBot();
-    stopBridgeServer();
     stopWorker();
     getLogger().info("Plugin disabled.");
 }
@@ -240,8 +235,6 @@ bool EndcordPlugin::onCommand(endstone::CommandSender &sender, const endstone::C
         }
 
         stopIntegratedBot();
-        stopManagedBot();
-        stopBridgeServer();
         stopWorker();
         clearQueue();
         loadConfig();
@@ -359,15 +352,10 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
           {"provider_bedrock_username_prefix", "."},
           {"size", 64}}},
         {"bot_bridge",
-         {{"enabled", true},
-          {"shared_secret", "change-me"},
-          {"api_route_prefix", "/endcord/api"},
-          {"allow_local_requests_only", true},
-          {"allowed_remote_addresses", json::array()},
-          {"inbound_chat_enabled", true},
+         {{"inbound_chat_enabled", true},
           {"command_enabled", true},
           {"outbound_system_messages_enabled", false},
-          {"inbound_chat_template", "[Discord] #{channel} <{author}> {content}"},
+          {"inbound_chat_template", "[Discord] <{author}> {content}"},
           {"inbound_chat_max_length", 2000},
           {"outbound_system_message_max_batch", 20},
           {"outbound_system_message_queue_max_size", 256},
@@ -375,32 +363,14 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
         {"logging",
          {{"log_filtered_events", false},
           {"log_webhook_successes", false},
-          {"log_http_requests", false},
           {"log_inbound_chat", false},
           {"log_remote_commands", true}}},
-        {"managed_bot",
-         {{"enabled", true},
-          {"executable_path", "{plugin_data}/bot/.venv/bin/endcord-bot"},
-          {"config_path", "{plugin_data}/bot/config.json"},
-          {"working_directory", "{plugin_data}/bot"},
-          {"log_path", "{plugin_data}/bot/bot.log"},
-          {"stop_timeout_ms", 5000}}}
+        {"bot", endcord::buildDefaultBotConfigJson()}
     };
 
     std::ofstream output(config_path);
     output << root.dump(2) << '\n';
     getLogger().info("Wrote default config to '{}'.", config_path.string());
-}
-
-void EndcordPlugin::writeDefaultBotConfigIfMissing() const
-{
-    const auto config_path = getBotConfigPath();
-    if (fs::exists(config_path)) {
-        return;
-    }
-
-    endcord::writeDefaultBotConfigIfMissing(config_path);
-    getLogger().info("Wrote default Discord bot config to '{}'.", config_path.string());
 }
 
 void EndcordPlugin::loadConfig()
@@ -610,25 +580,22 @@ void EndcordPlugin::loadConfig()
             }
         }
 
-        if (root.contains("managed_bot") && root["managed_bot"].is_object()) {
+        if (root.contains("integrated_bot") && root["integrated_bot"].is_object()) {
+            const auto &integrated_bot = root["integrated_bot"];
+            if (integrated_bot.contains("enabled") && integrated_bot["enabled"].is_boolean()) {
+                config_.integrated_bot.enabled = integrated_bot["enabled"].get<bool>();
+            }
+            if (integrated_bot.contains("config_path") && integrated_bot["config_path"].is_string()) {
+                config_.integrated_bot.config_path = integrated_bot["config_path"].get<std::string>();
+            }
+        }
+        else if (root.contains("managed_bot") && root["managed_bot"].is_object()) {
             const auto &managed_bot = root["managed_bot"];
             if (managed_bot.contains("enabled") && managed_bot["enabled"].is_boolean()) {
-                config_.managed_bot.enabled = managed_bot["enabled"].get<bool>();
-            }
-            if (managed_bot.contains("executable_path") && managed_bot["executable_path"].is_string()) {
-                config_.managed_bot.executable_path = managed_bot["executable_path"].get<std::string>();
+                config_.integrated_bot.enabled = managed_bot["enabled"].get<bool>();
             }
             if (managed_bot.contains("config_path") && managed_bot["config_path"].is_string()) {
-                config_.managed_bot.config_path = managed_bot["config_path"].get<std::string>();
-            }
-            if (managed_bot.contains("working_directory") && managed_bot["working_directory"].is_string()) {
-                config_.managed_bot.working_directory = managed_bot["working_directory"].get<std::string>();
-            }
-            if (managed_bot.contains("log_path") && managed_bot["log_path"].is_string()) {
-                config_.managed_bot.log_path = managed_bot["log_path"].get<std::string>();
-            }
-            if (managed_bot.contains("stop_timeout_ms") && managed_bot["stop_timeout_ms"].is_number_integer()) {
-                config_.managed_bot.stop_timeout_ms = managed_bot["stop_timeout_ms"].get<int>();
+                config_.integrated_bot.config_path = managed_bot["config_path"].get<std::string>();
             }
         }
     }
@@ -657,8 +624,6 @@ void EndcordPlugin::loadConfig()
     config_.bot_bridge.outbound_system_message_queue_max_size =
         std::clamp(config_.bot_bridge.outbound_system_message_queue_max_size, 1, 4096);
     config_.bot_bridge.request_timeout_ms = std::max(config_.bot_bridge.request_timeout_ms, 250);
-    config_.managed_bot.stop_timeout_ms = std::max(config_.managed_bot.stop_timeout_ms, 100);
-
     if (!config_.avatar.provider_url_template.empty() && config_.avatar.provider_url_template.ends_with('/')) {
         config_.avatar.provider_url_template.pop_back();
     }
@@ -693,7 +658,6 @@ void EndcordPlugin::restartRuntime()
         return;
     }
 
-    startBridgeServer();
     startWorker();
     startIntegratedBot();
 }
@@ -820,7 +784,11 @@ void EndcordPlugin::startIntegratedBot()
         return;
     }
 
-    const auto config_path = getBotConfigPath();
+    if (!config_.integrated_bot.enabled) {
+        return;
+    }
+
+    const auto config_path = expandManagedBotPath(config_.integrated_bot.config_path);
     if (!fs::exists(config_path)) {
         getLogger().info("Integrated Discord bot config '{}' does not exist yet.", config_path.string());
         return;
@@ -1073,7 +1041,7 @@ void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
     sender.sendMessage("Bridge HTTP server running: {}", (bridge_server_ && bridge_server_->is_running()) ? "yes" : "no");
     sender.sendMessage("Bot bridge enabled: {}", config_.bot_bridge.enabled ? "yes" : "no");
     sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
-    sender.sendMessage("Integrated bot enabled: {}", config_.managed_bot.enabled ? "yes" : "no");
+    sender.sendMessage("Integrated bot enabled: {}", config_.integrated_bot.enabled ? "yes" : "no");
     sender.sendMessage("Integrated bot running: {}", isManagedBotRunning() ? "yes" : "no");
 }
 
@@ -1227,7 +1195,9 @@ nlohmann::json EndcordPlugin::buildBridgeStatusPayload() const
                  {"avatar_enabled", config_.avatar.enabled},
                  {"avatar_provider", config_.avatar.provider},
                  {"bot_bridge_enabled", config_.bot_bridge.enabled},
-                 {"managed_bot_enabled", config_.managed_bot.enabled},
+                 {"integrated_bot_enabled", config_.integrated_bot.enabled},
+                 {"integrated_bot_running", integrated_bot_ && integrated_bot_->isRunning()},
+                 {"managed_bot_enabled", config_.integrated_bot.enabled},
                  {"managed_bot_running", integrated_bot_ && integrated_bot_->isRunning()}});
 }
 
@@ -1498,7 +1468,9 @@ void EndcordPlugin::handleBotBridgeHealth(const httplib::Request &req, httplib::
                           {"webhook_worker_running", worker_thread_.joinable()},
                           {"webhook_configured", webhook_target_.has_value()},
                           {"webhook_queue_depth", queue_depth},
-                          {"managed_bot_enabled", config_.managed_bot.enabled},
+                          {"integrated_bot_enabled", config_.integrated_bot.enabled},
+                          {"integrated_bot_running", isManagedBotRunning()},
+                          {"managed_bot_enabled", config_.integrated_bot.enabled},
                           {"managed_bot_running", isManagedBotRunning()}})
                         .dump(),
                     "application/json");

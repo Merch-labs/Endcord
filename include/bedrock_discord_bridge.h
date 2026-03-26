@@ -1,5 +1,7 @@
 #pragma once
 
+#include "endcord_bot_config.h"
+
 #include <endstone/endstone.hpp>
 #include <nlohmann/json.hpp>
 
@@ -18,9 +20,6 @@
 #include <vector>
 
 namespace httplib {
-struct Request;
-struct Response;
-class Server;
 class Client;
 }
 
@@ -87,15 +86,10 @@ private:
     };
 
     struct BotBridgeOptions {
-        bool enabled = true;
-        std::string shared_secret;
-        std::string api_route_prefix = "/endcord/api";
-        bool allow_local_requests_only = true;
-        std::vector<std::string> allowed_remote_addresses{};
         bool inbound_chat_enabled = true;
         bool command_enabled = true;
         bool outbound_system_messages_enabled = false;
-        std::string inbound_chat_template = "[Discord] #{channel} <{author}> {content}";
+        std::string inbound_chat_template = "[Discord] <{author}> {content}";
         int inbound_chat_max_length = 2000;
         int outbound_system_message_max_batch = 20;
         int outbound_system_message_queue_max_size = 256;
@@ -110,15 +104,6 @@ private:
         bool log_remote_commands = true;
     };
 
-    struct ManagedBotOptions {
-        bool enabled = true;
-        std::string executable_path = "{plugin_data}/bot/.venv/bin/endcord-bot";
-        std::string config_path = "{plugin_data}/bot/config.json";
-        std::string working_directory = "{plugin_data}/bot";
-        std::string log_path = "{plugin_data}/bot/bot.log";
-        int stop_timeout_ms = 5000;
-    };
-
     struct BridgeConfig {
         int config_version = 8;
         bool enabled = true;
@@ -128,7 +113,7 @@ private:
         AvatarOptions avatar{};
         BotBridgeOptions bot_bridge{};
         LoggingOptions logging{};
-        ManagedBotOptions managed_bot{};
+        endcord::BotConfig bot{};
     };
 
     struct WebhookTarget {
@@ -150,18 +135,13 @@ private:
 
     void ensureDataFolder() const;
     void writeDefaultConfigIfMissing() const;
-    void writeDefaultBotConfigIfMissing() const;
     void loadConfig();
     void restartRuntime();
     void clearQueue();
     void startWorker();
     void stopWorker();
-    void startBridgeServer();
-    void stopBridgeServer();
     void startIntegratedBot();
     void stopIntegratedBot();
-    void startManagedBot();
-    void stopManagedBot();
     void workerLoop();
     void sendStatus(endstone::CommandSender &sender) const;
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
@@ -172,13 +152,6 @@ private:
     void enqueueBotSystemMessage(std::string event_name, std::string player_name, std::string content);
     void enqueueWebhookPayload(WebhookJob job);
     void processWebhookJob(WebhookJob job);
-    void installBotBridgeRoutes();
-    void handleBotBridgeChat(const httplib::Request &req, httplib::Response &res);
-    void handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res);
-    void handleBotBridgeDrainSystemMessages(const httplib::Request &req, httplib::Response &res);
-    void handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res);
-    void handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res);
-    void handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res);
     nlohmann::json buildBridgeStatusPayload() const;
     nlohmann::json relayDiscordChat(const std::string &author, const std::string &content, const std::string &channel,
                                     const std::string &guild, const std::string &message_url,
@@ -187,8 +160,6 @@ private:
     nlohmann::json executeDiscordCommand(const std::string &actor, const std::string &command_line);
     nlohmann::json drainPendingSystemMessages();
     nlohmann::json configureRuntimeWebhook(const std::string &webhook_url);
-    bool isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const;
-    bool isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const;
     void loadWebhookState();
     void persistWebhookState() const;
     void clearWebhookState() const;
@@ -198,16 +169,10 @@ private:
     static std::optional<WebhookTarget> parseWebhookUrl(const std::string &url);
     static std::optional<std::int64_t> parseRetryDelayMs(const std::string &value);
     static std::optional<std::int64_t> parseRetryDelayMsFromBody(const std::string &body);
-    static std::string normalizeRoutePrefix(const std::string &value);
-    static std::string normalizeSecret(std::string value);
-    static bool isLoopbackAddress(const std::string &host);
     static std::string messageToPlainText(const endstone::Message &message);
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
-    std::filesystem::path expandManagedBotPath(const std::string &value) const;
-    bool isManagedBotRunning() const;
 
     std::filesystem::path getConfigPath() const;
-    std::filesystem::path getBotConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
 
     static std::string escapeJson(const std::string &value);
@@ -221,12 +186,9 @@ private:
     std::deque<WebhookJob> webhook_queue_;
     std::thread worker_thread_;
     std::unique_ptr<httplib::Client> webhook_client_;
-    std::unique_ptr<httplib::Server> bridge_server_;
-    std::thread bridge_server_thread_;
     bool stop_worker_ = false;
     std::chrono::steady_clock::time_point next_request_at_ = std::chrono::steady_clock::now();
     mutable std::mutex system_message_mutex_;
     std::deque<PendingSystemMessage> pending_system_messages_;
     std::unique_ptr<endcord::IntegratedBot> integrated_bot_;
-    int managed_bot_pid_ = -1;
 };

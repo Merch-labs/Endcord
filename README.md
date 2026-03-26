@@ -68,7 +68,7 @@ The most important plugin settings are:
 - `bot_bridge.allow_local_requests_only`
 - `avatar.provider`
 - `bot_bridge.inbound_chat_template`
-- `managed_bot.enabled`
+- `integrated_bot.enabled`
 
 For most users:
 
@@ -79,14 +79,11 @@ For most users:
 Plugin schema:
 - [config/config.schema.json](config/config.schema.json)
 
-### 4. Set up the bot config
+### 4. Set up the integrated bot config
 
-In the `bot/` folder:
+Start the server once and Endcord will create:
 
-```bash
-cd bot
-./scripts/bootstrap-local-runtime.sh /path/to/bedrock_server/plugins/endcord/bot/config.json
-```
+- `plugins/endcord/bot/config.json`
 
 Then edit:
 
@@ -97,19 +94,14 @@ Usually you can leave these as-is:
 
 - `discord.guild_id = 0`
 - `discord.auto_create_webhook = true`
-- `plugin_bridge.configure_webhook_on_startup = true`
-- `plugin_bridge.base_url = http://127.0.0.1:8089/endcord/api`
-
-The bot will automatically read `bot_bridge.shared_secret` from the colocated plugin config.
-The plugin will automatically start the bot from `plugins/endcord/bot/.venv/bin/endcord-bot`.
 
 Bot schema:
 - [bot/config.schema.json](bot/config.schema.json)
 
 ### 5. Start the server
 
-Start or restart Endstone after the bot is bootstrapped into `plugins/endcord/bot/`.
-Endcord will start and stop the bot process with the plugin.
+Start or restart Endstone after filling in `plugins/endcord/bot/config.json`.
+Endcord will start and stop the integrated Discord runtime with the plugin.
 
 If you want to run the bot outside the server-managed path, you can still use:
 - [run-local-runtime.sh](bot/scripts/run-local-runtime.sh)

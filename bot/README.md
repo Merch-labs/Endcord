@@ -1,6 +1,8 @@
 # Endcord Bot
 
-Companion Discord bot for the Endstone Endcord plugin.
+Legacy standalone Discord bot for the Endstone Endcord plugin.
+
+The `integrate-bot-into-plugin` branch now embeds the Discord runtime directly inside the C++ plugin, so normal users on this branch do not need the standalone Python bot. This folder is kept as a reference/runtime fallback while the integrated path settles.
 
 This bot is responsible for:
 

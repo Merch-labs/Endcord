@@ -58,7 +58,15 @@ void writeDefaultBotConfigIfMissing(const std::filesystem::path &path)
     }
 
     std::filesystem::create_directories(path.parent_path());
-    const json root = {
+    const auto root = buildDefaultBotConfigJson();
+
+    std::ofstream output(path);
+    output << root.dump(2) << '\n';
+}
+
+nlohmann::json buildDefaultBotConfigJson()
+{
+    return {
         {"discord",
          {{"token", "replace-me"},
           {"guild_id", 0},
@@ -70,10 +78,8 @@ void writeDefaultBotConfigIfMissing(const std::filesystem::path &path)
           {"sync_commands_globally", false},
           {"auto_create_webhook", true},
           {"webhook_name", "Endcord"}}},
-        {"plugin_bridge",
-         {{"base_url", "http://127.0.0.1:8089/endcord/api"},
-          {"shared_secret", ""},
-          {"request_timeout_seconds", 10},
+        {"integration",
+         {{"request_timeout_seconds", 10},
           {"configure_webhook_on_startup", true},
           {"request_max_retries", 3},
           {"request_retry_base_seconds", 1.5},
@@ -118,23 +124,16 @@ void writeDefaultBotConfigIfMissing(const std::filesystem::path &path)
           {"message_template", "{content}"},
           {"max_messages_per_poll", 20}}}
     };
-
-    std::ofstream output(path);
-    output << root.dump(2) << '\n';
 }
 
-BotConfig loadBotConfig(const std::filesystem::path &path)
+BotConfig loadBotConfig(const nlohmann::json &root)
 {
-    std::ifstream input(path);
-    if (!input.is_open()) {
-        throw std::runtime_error("Could not open bot config: " + path.string());
-    }
-
-    const auto root = json::parse(input);
     const auto &discord_cfg = root.contains("discord") && root["discord"].is_object() ? root["discord"] : json::object();
     const auto &relay_cfg = root.contains("relay") && root["relay"].is_object() ? root["relay"] : json::object();
-    const auto &plugin_bridge_cfg =
-        root.contains("plugin_bridge") && root["plugin_bridge"].is_object() ? root["plugin_bridge"] : json::object();
+    const auto &integration_cfg =
+        root.contains("integration") && root["integration"].is_object()
+            ? root["integration"]
+            : (root.contains("plugin_bridge") && root["plugin_bridge"].is_object() ? root["plugin_bridge"] : json::object());
     const auto &slash_cfg =
         root.contains("slash_commands") && root["slash_commands"].is_object() ? root["slash_commands"] : json::object();
     const auto &presence_cfg =
@@ -159,16 +158,13 @@ BotConfig loadBotConfig(const std::filesystem::path &path)
     config.discord.auto_create_webhook = discord_cfg.value("auto_create_webhook", true);
     config.discord.webhook_name = discord_cfg.value("webhook_name", std::string("Endcord"));
 
-    config.plugin_bridge.base_url =
-        plugin_bridge_cfg.value("base_url", std::string("http://127.0.0.1:8089/endcord/api"));
-    config.plugin_bridge.shared_secret = plugin_bridge_cfg.value("shared_secret", std::string());
-    config.plugin_bridge.request_timeout_seconds = std::max(plugin_bridge_cfg.value("request_timeout_seconds", 10), 1);
-    config.plugin_bridge.configure_webhook_on_startup = plugin_bridge_cfg.value("configure_webhook_on_startup", true);
-    config.plugin_bridge.request_max_retries = std::max(plugin_bridge_cfg.value("request_max_retries", 3), 0);
-    config.plugin_bridge.request_retry_base_seconds =
-        std::max(plugin_bridge_cfg.value("request_retry_base_seconds", 1.5), 0.1);
-    config.plugin_bridge.request_retry_max_seconds =
-        std::max(plugin_bridge_cfg.value("request_retry_max_seconds", 15.0), 0.1);
+    config.integration.request_timeout_seconds = std::max(integration_cfg.value("request_timeout_seconds", 10), 1);
+    config.integration.configure_webhook_on_startup = integration_cfg.value("configure_webhook_on_startup", true);
+    config.integration.request_max_retries = std::max(integration_cfg.value("request_max_retries", 3), 0);
+    config.integration.request_retry_base_seconds =
+        std::max(integration_cfg.value("request_retry_base_seconds", 1.5), 0.1);
+    config.integration.request_retry_max_seconds =
+        std::max(integration_cfg.value("request_retry_max_seconds", 15.0), 0.1);
 
     config.relay.include_attachment_urls = relay_cfg.value("include_attachment_urls", true);
     config.relay.include_jump_url = relay_cfg.value("include_jump_url", false);
@@ -212,6 +208,16 @@ BotConfig loadBotConfig(const std::filesystem::path &path)
     config.system_messages.max_messages_per_poll = std::max(system_cfg.value("max_messages_per_poll", 20), 1);
 
     return config;
+}
+
+BotConfig loadBotConfig(const std::filesystem::path &path)
+{
+    std::ifstream input(path);
+    if (!input.is_open()) {
+        throw std::runtime_error("Could not open bot config: " + path.string());
+    }
+
+    return loadBotConfig(json::parse(input));
 }
 
 }  // namespace endcord

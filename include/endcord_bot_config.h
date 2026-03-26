@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <cstdint>
 #include <string>
@@ -48,9 +50,7 @@ struct RelayRuntimeConfig {
     int max_message_length = 1800;
 };
 
-struct PluginBridgeRuntimeConfig {
-    std::string base_url = "http://127.0.0.1:8089/endcord/api";
-    std::string shared_secret;
+struct IntegrationRuntimeConfig {
     int request_timeout_seconds = 10;
     bool configure_webhook_on_startup = true;
     int request_max_retries = 3;
@@ -87,7 +87,7 @@ struct SystemMessageRuntimeConfig {
 
 struct BotConfig {
     DiscordRuntimeConfig discord{};
-    PluginBridgeRuntimeConfig plugin_bridge{};
+    IntegrationRuntimeConfig integration{};
     RelayRuntimeConfig relay{};
     SlashCommandConfig slash_commands{};
     PresenceRuntimeConfig presence{};
@@ -95,7 +95,9 @@ struct BotConfig {
     SystemMessageRuntimeConfig system_messages{};
 };
 
+nlohmann::json buildDefaultBotConfigJson();
 void writeDefaultBotConfigIfMissing(const std::filesystem::path &path);
+BotConfig loadBotConfig(const nlohmann::json &root);
 BotConfig loadBotConfig(const std::filesystem::path &path);
 
 }  // namespace endcord

@@ -61,12 +61,8 @@
     "log_inbound_chat": false,
     "log_remote_commands": true
   },
-  "managed_bot": {
+  "integrated_bot": {
     "enabled": true,
-    "executable_path": "{plugin_data}/bot/.venv/bin/endcord-bot",
-    "config_path": "{plugin_data}/bot/config.json",
-    "working_directory": "{plugin_data}/bot",
-    "log_path": "{plugin_data}/bot/bot.log",
-    "stop_timeout_ms": 5000
+    "config_path": "{plugin_data}/bot/config.json"
   }
 }
