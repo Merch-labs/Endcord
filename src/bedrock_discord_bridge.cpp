@@ -1058,9 +1058,7 @@ nlohmann::json EndcordPlugin::buildBridgeStatusPayload() const
                  {"avatar_provider", config_.avatar.provider},
                  {"bot_bridge_enabled", true},
                  {"integrated_bot_enabled", true},
-                 {"integrated_bot_running", integrated_bot_ && integrated_bot_->isRunning()},
-                 {"managed_bot_enabled", false},
-                 {"managed_bot_running", false}});
+                 {"integrated_bot_running", integrated_bot_ && integrated_bot_->isRunning()}});
 }
 
 nlohmann::json EndcordPlugin::relayDiscordChat(const std::string &author, const std::string &content,

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.0 - 2026-03-26
+
+- Integrated the Discord runtime directly into the Endstone plugin in C++.
+- Removed the separate Python companion bot runtime from the default architecture.
+- Moved Discord runtime settings into the main plugin config under `bot`.
+- Removed the external bridge secret and local bot API requirements for the normal setup.
+- Simplified installation to one plugin and one config file.
+
 ## 0.4.0 - 2026-03-15
 
 - Added configurable Minecraft-to-Discord relay toggles for chat, join, quit, and death events.

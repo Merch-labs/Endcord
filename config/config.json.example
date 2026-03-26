@@ -1,5 +1,5 @@
 {
-  "config_version": 8,
+  "config_version": 9,
   "enabled": true,
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/replace-me",
@@ -40,11 +40,6 @@
     "size": 64
   },
   "bot_bridge": {
-    "enabled": true,
-    "shared_secret": "change-me",
-    "api_route_prefix": "/endcord/api",
-    "allow_local_requests_only": true,
-    "allowed_remote_addresses": [],
     "inbound_chat_enabled": true,
     "command_enabled": true,
     "outbound_system_messages_enabled": false,
@@ -57,12 +52,92 @@
   "logging": {
     "log_filtered_events": false,
     "log_webhook_successes": false,
-    "log_http_requests": false,
     "log_inbound_chat": false,
     "log_remote_commands": true
   },
-  "integrated_bot": {
-    "enabled": true,
-    "config_path": "{plugin_data}/bot/config.json"
+  "bot": {
+    "discord": {
+      "token": "replace-me",
+      "guild_id": 0,
+      "relay_channel_ids": [0],
+      "outbound_channel_id": 0,
+      "command_role_ids": [],
+      "status_role_ids": [],
+      "relay_to_game_enabled": true,
+      "sync_commands_globally": false,
+      "auto_create_webhook": true,
+      "webhook_name": "Endcord"
+    },
+    "integration": {
+      "request_timeout_seconds": 10,
+      "configure_webhook_on_startup": true,
+      "request_max_retries": 3,
+      "request_retry_base_seconds": 1.5,
+      "request_retry_max_seconds": 15.0
+    },
+    "relay": {
+      "include_attachment_urls": true,
+      "include_jump_url": false,
+      "ignore_bot_messages": true,
+      "ignore_webhook_messages": true,
+      "message_template": "{content}{attachments}{jump_url}",
+      "attachment_template": "\n[attachment] {url}",
+      "jump_url_template": "\n[jump] {url}",
+      "join_separator": "\n",
+      "max_message_length": 1800
+    },
+    "slash_commands": {
+      "enabled": true,
+      "ephemeral_responses": true,
+      "status": {
+        "enabled": true,
+        "admin_only": false,
+        "role_ids": []
+      },
+      "players": {
+        "enabled": true,
+        "admin_only": false,
+        "role_ids": []
+      },
+      "ping": {
+        "enabled": true,
+        "admin_only": false,
+        "role_ids": []
+      },
+      "command": {
+        "enabled": true,
+        "admin_only": true,
+        "role_ids": []
+      },
+      "configreload": {
+        "enabled": true,
+        "admin_only": true,
+        "role_ids": []
+      }
+    },
+    "presence": {
+      "enabled": true,
+      "status": "online",
+      "activity_type": "watching",
+      "activity_text": "{server_name} | {online_players} online",
+      "fallback_text": "Endcord online",
+      "streaming_url": "",
+      "update_interval_seconds": 120
+    },
+    "logging": {
+      "level": "INFO",
+      "log_ignored_messages": false,
+      "log_relay_successes": false,
+      "log_presence_updates": false
+    },
+    "system_messages": {
+      "enabled": false,
+      "channel_id": 0,
+      "poll_interval_seconds": 2,
+      "failure_backoff_seconds": 5,
+      "max_backoff_seconds": 60,
+      "message_template": "{content}",
+      "max_messages_per_poll": 20
+    }
   }
 }

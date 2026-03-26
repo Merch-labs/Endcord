@@ -581,8 +581,8 @@ struct IntegratedBot::Impl {
             {"{avatar_enabled}", boolText(status_payload.value("avatar_enabled", false))},
             {"{avatar_provider}", status_payload.value("avatar_provider", std::string())},
             {"{bot_bridge_enabled}", boolText(status_payload.value("bot_bridge_enabled", false))},
-            {"{managed_bot_enabled}", boolText(status_payload.value("managed_bot_enabled", false))},
-            {"{managed_bot_running}", boolText(status_payload.value("managed_bot_running", false))},
+            {"{integrated_bot_enabled}", boolText(status_payload.value("integrated_bot_enabled", false))},
+            {"{integrated_bot_running}", boolText(status_payload.value("integrated_bot_running", false))},
             {"{guild_name}", resolvedGuildId() != 0 ? std::to_string(resolvedGuildId()) : std::string()},
             {"{guild_id}", resolvedGuildId() != 0 ? std::to_string(resolvedGuildId()) : std::string()},
         };

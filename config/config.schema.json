@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://endcord.local/plugin-config.schema.json",
-  "title": "Endcord Plugin Config",
+  "title": "Endcord Config",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,7 +13,7 @@
     "avatar",
     "bot_bridge",
     "logging",
-    "integrated_bot"
+    "bot"
   ],
   "properties": {
     "config_version": {
@@ -41,46 +41,18 @@
         "max_content_length"
       ],
       "properties": {
-        "webhook_url": {
-          "type": "string"
-        },
-        "allow_runtime_webhook_override": {
-          "type": "boolean"
-        },
-        "username_template": {
-          "type": "string"
-        },
-        "content_template": {
-          "type": "string"
-        },
-        "system_username_template": {
-          "type": "string"
-        },
-        "join_content_template": {
-          "type": "string"
-        },
-        "quit_content_template": {
-          "type": "string"
-        },
-        "death_content_template": {
-          "type": "string"
-        },
-        "allow_mentions": {
-          "type": "boolean"
-        },
-        "use_player_avatar_for_system_messages": {
-          "type": "boolean"
-        },
-        "max_username_length": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 80
-        },
-        "max_content_length": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 2000
-        }
+        "webhook_url": { "type": "string" },
+        "allow_runtime_webhook_override": { "type": "boolean" },
+        "username_template": { "type": "string" },
+        "content_template": { "type": "string" },
+        "system_username_template": { "type": "string" },
+        "join_content_template": { "type": "string" },
+        "quit_content_template": { "type": "string" },
+        "death_content_template": { "type": "string" },
+        "allow_mentions": { "type": "boolean" },
+        "use_player_avatar_for_system_messages": { "type": "boolean" },
+        "max_username_length": { "type": "integer", "minimum": 1, "maximum": 80 },
+        "max_content_length": { "type": "integer", "minimum": 1, "maximum": 2000 }
       }
     },
     "relay": {
@@ -94,21 +66,11 @@
         "death_enabled"
       ],
       "properties": {
-        "minecraft_to_discord_enabled": {
-          "type": "boolean"
-        },
-        "chat_enabled": {
-          "type": "boolean"
-        },
-        "join_enabled": {
-          "type": "boolean"
-        },
-        "quit_enabled": {
-          "type": "boolean"
-        },
-        "death_enabled": {
-          "type": "boolean"
-        }
+        "minecraft_to_discord_enabled": { "type": "boolean" },
+        "chat_enabled": { "type": "boolean" },
+        "join_enabled": { "type": "boolean" },
+        "quit_enabled": { "type": "boolean" },
+        "death_enabled": { "type": "boolean" }
       }
     },
     "queue": {
@@ -123,31 +85,12 @@
         "write_timeout_ms"
       ],
       "properties": {
-        "max_size": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_attempts": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 20
-        },
-        "retry_delay_ms": {
-          "type": "integer",
-          "minimum": 100
-        },
-        "connect_timeout_ms": {
-          "type": "integer",
-          "minimum": 100
-        },
-        "read_timeout_ms": {
-          "type": "integer",
-          "minimum": 100
-        },
-        "write_timeout_ms": {
-          "type": "integer",
-          "minimum": 100
-        }
+        "max_size": { "type": "integer", "minimum": 1 },
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "retry_delay_ms": { "type": "integer", "minimum": 100 },
+        "connect_timeout_ms": { "type": "integer", "minimum": 100 },
+        "read_timeout_ms": { "type": "integer", "minimum": 100 },
+        "write_timeout_ms": { "type": "integer", "minimum": 100 }
       }
     },
     "avatar": {
@@ -163,41 +106,19 @@
         "size"
       ],
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "provider": {
-          "type": "string",
-          "enum": ["tabavatars", "mcheads", "custom"]
-        },
-        "provider_url_template": {
-          "type": "string"
-        },
-        "provider_prefer_xuid": {
-          "type": "boolean"
-        },
-        "provider_render_type": {
-          "type": "string"
-        },
-        "provider_bedrock_username_prefix": {
-          "type": "string"
-        },
-        "size": {
-          "type": "integer",
-          "minimum": 8,
-          "maximum": 512
-        }
+        "enabled": { "type": "boolean" },
+        "provider": { "type": "string", "enum": ["tabavatars", "mcheads", "custom"] },
+        "provider_url_template": { "type": "string" },
+        "provider_prefer_xuid": { "type": "boolean" },
+        "provider_render_type": { "type": "string" },
+        "provider_bedrock_username_prefix": { "type": "string" },
+        "size": { "type": "integer", "minimum": 8, "maximum": 512 }
       }
     },
     "bot_bridge": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "enabled",
-        "shared_secret",
-        "api_route_prefix",
-        "allow_local_requests_only",
-        "allowed_remote_addresses",
         "inbound_chat_enabled",
         "command_enabled",
         "outbound_system_messages_enabled",
@@ -208,55 +129,14 @@
         "request_timeout_ms"
       ],
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "shared_secret": {
-          "type": "string"
-        },
-        "api_route_prefix": {
-          "type": "string"
-        },
-        "allow_local_requests_only": {
-          "type": "boolean"
-        },
-        "allowed_remote_addresses": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "inbound_chat_enabled": {
-          "type": "boolean"
-        },
-        "command_enabled": {
-          "type": "boolean"
-        },
-        "outbound_system_messages_enabled": {
-          "type": "boolean"
-        },
-        "inbound_chat_template": {
-          "type": "string"
-        },
-        "inbound_chat_max_length": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4000
-        },
-        "outbound_system_message_max_batch": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100
-        },
-        "outbound_system_message_queue_max_size": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4096
-        },
-        "request_timeout_ms": {
-          "type": "integer",
-          "minimum": 250
-        }
+        "inbound_chat_enabled": { "type": "boolean" },
+        "command_enabled": { "type": "boolean" },
+        "outbound_system_messages_enabled": { "type": "boolean" },
+        "inbound_chat_template": { "type": "string" },
+        "inbound_chat_max_length": { "type": "integer", "minimum": 1, "maximum": 4000 },
+        "outbound_system_message_max_batch": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "outbound_system_message_queue_max_size": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "request_timeout_ms": { "type": "integer", "minimum": 250 }
       }
     },
     "logging": {
@@ -265,41 +145,164 @@
       "required": [
         "log_filtered_events",
         "log_webhook_successes",
-        "log_http_requests",
         "log_inbound_chat",
         "log_remote_commands"
       ],
       "properties": {
-        "log_filtered_events": {
-          "type": "boolean"
-        },
-        "log_webhook_successes": {
-          "type": "boolean"
-        },
-        "log_http_requests": {
-          "type": "boolean"
-        },
-        "log_inbound_chat": {
-          "type": "boolean"
-        },
-        "log_remote_commands": {
-          "type": "boolean"
-        }
+        "log_filtered_events": { "type": "boolean" },
+        "log_webhook_successes": { "type": "boolean" },
+        "log_inbound_chat": { "type": "boolean" },
+        "log_remote_commands": { "type": "boolean" }
       }
     },
-    "integrated_bot": {
+    "bot": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "enabled",
-        "config_path"
+        "discord",
+        "integration",
+        "relay",
+        "slash_commands",
+        "presence",
+        "logging",
+        "system_messages"
       ],
       "properties": {
-        "enabled": {
-          "type": "boolean"
+        "discord": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "token",
+            "guild_id",
+            "relay_channel_ids",
+            "outbound_channel_id",
+            "command_role_ids",
+            "status_role_ids",
+            "relay_to_game_enabled",
+            "sync_commands_globally",
+            "auto_create_webhook",
+            "webhook_name"
+          ],
+          "properties": {
+            "token": { "type": "string" },
+            "guild_id": { "type": "integer", "minimum": 0 },
+            "relay_channel_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "outbound_channel_id": { "type": "integer", "minimum": 0 },
+            "command_role_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "status_role_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "relay_to_game_enabled": { "type": "boolean" },
+            "sync_commands_globally": { "type": "boolean" },
+            "auto_create_webhook": { "type": "boolean" },
+            "webhook_name": { "type": "string" }
+          }
         },
-        "config_path": {
-          "type": "string"
+        "integration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "request_timeout_seconds",
+            "configure_webhook_on_startup",
+            "request_max_retries",
+            "request_retry_base_seconds",
+            "request_retry_max_seconds"
+          ],
+          "properties": {
+            "request_timeout_seconds": { "type": "integer", "minimum": 1 },
+            "configure_webhook_on_startup": { "type": "boolean" },
+            "request_max_retries": { "type": "integer", "minimum": 0 },
+            "request_retry_base_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "request_retry_max_seconds": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "relay": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "include_attachment_urls",
+            "include_jump_url",
+            "ignore_bot_messages",
+            "ignore_webhook_messages",
+            "message_template",
+            "attachment_template",
+            "jump_url_template",
+            "join_separator",
+            "max_message_length"
+          ],
+          "properties": {
+            "include_attachment_urls": { "type": "boolean" },
+            "include_jump_url": { "type": "boolean" },
+            "ignore_bot_messages": { "type": "boolean" },
+            "ignore_webhook_messages": { "type": "boolean" },
+            "message_template": { "type": "string" },
+            "attachment_template": { "type": "string" },
+            "jump_url_template": { "type": "string" },
+            "join_separator": { "type": "string" },
+            "max_message_length": { "type": "integer", "minimum": 32 }
+          }
+        },
+        "slash_commands": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "presence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "status",
+            "activity_type",
+            "activity_text",
+            "fallback_text",
+            "streaming_url",
+            "update_interval_seconds"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "status": { "type": "string" },
+            "activity_type": { "type": "string" },
+            "activity_text": { "type": "string" },
+            "fallback_text": { "type": "string" },
+            "streaming_url": { "type": "string" },
+            "update_interval_seconds": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "level",
+            "log_ignored_messages",
+            "log_relay_successes",
+            "log_presence_updates"
+          ],
+          "properties": {
+            "level": { "type": "string" },
+            "log_ignored_messages": { "type": "boolean" },
+            "log_relay_successes": { "type": "boolean" },
+            "log_presence_updates": { "type": "boolean" }
+          }
+        },
+        "system_messages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "channel_id",
+            "poll_interval_seconds",
+            "failure_backoff_seconds",
+            "max_backoff_seconds",
+            "message_template",
+            "max_messages_per_poll"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "channel_id": { "type": "integer", "minimum": 0 },
+            "poll_interval_seconds": { "type": "integer", "minimum": 1 },
+            "failure_backoff_seconds": { "type": "integer", "minimum": 1 },
+            "max_backoff_seconds": { "type": "integer", "minimum": 1 },
+            "message_template": { "type": "string" },
+            "max_messages_per_poll": { "type": "integer", "minimum": 1 }
+          }
         }
       }
     }
