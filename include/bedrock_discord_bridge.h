@@ -145,6 +145,7 @@ private:
 
     void ensureDataFolder() const;
     void writeDefaultConfigIfMissing() const;
+    void writeDefaultBotConfigIfMissing() const;
     void loadConfig();
     void restartRuntime();
     void clearQueue();
@@ -191,6 +192,7 @@ private:
     bool isManagedBotRunning() const;
 
     std::filesystem::path getConfigPath() const;
+    std::filesystem::path getBotConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
 
     static std::string escapeJson(const std::string &value);

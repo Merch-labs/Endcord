@@ -1,5 +1,6 @@
 #include "bedrock_discord_bridge.h"
 #include "bridge_support.h"
+#include "endcord_bot_config.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -192,6 +193,7 @@ void EndcordPlugin::onEnable()
 {
     ensureDataFolder();
     writeDefaultConfigIfMissing();
+    writeDefaultBotConfigIfMissing();
     loadConfig();
     registerEvent(&EndcordPlugin::onPlayerChat, *this);
     registerEvent(&EndcordPlugin::onPlayerJoin, *this);
@@ -384,6 +386,17 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
     std::ofstream output(config_path);
     output << root.dump(2) << '\n';
     getLogger().info("Wrote default config to '{}'.", config_path.string());
+}
+
+void EndcordPlugin::writeDefaultBotConfigIfMissing() const
+{
+    const auto config_path = getBotConfigPath();
+    if (fs::exists(config_path)) {
+        return;
+    }
+
+    endcord::writeDefaultBotConfigIfMissing(config_path);
+    getLogger().info("Wrote default Discord bot config to '{}'.", config_path.string());
 }
 
 void EndcordPlugin::loadConfig()
@@ -1747,6 +1760,11 @@ bool EndcordPlugin::isLoopbackAddress(const std::string &host)
 std::filesystem::path EndcordPlugin::getConfigPath() const
 {
     return getDataFolder() / "config.json";
+}
+
+std::filesystem::path EndcordPlugin::getBotConfigPath() const
+{
+    return getDataFolder() / "bot" / "config.json";
 }
 
 std::filesystem::path EndcordPlugin::getWebhookStatePath() const

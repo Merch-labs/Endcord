@@ -32,9 +32,13 @@ FetchContent_MakeAvailable(nlohmann_json)
 add_library(bridge_support STATIC src/bridge_support.cpp)
 target_include_directories(bridge_support PUBLIC include)
 
+add_library(endcord_bot_config STATIC src/endcord_bot_config.cpp)
+target_include_directories(endcord_bot_config PUBLIC include)
+target_link_libraries(endcord_bot_config PUBLIC nlohmann_json::nlohmann_json)
+
 endstone_add_plugin(${PROJECT_NAME} src/bedrock_discord_bridge.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support httplib::httplib nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE bridge_support endcord_bot_config httplib::httplib nlohmann_json::nlohmann_json)
 
 add_executable(bridge_support_tests tests/bridge_support_test.cpp)
 target_link_libraries(bridge_support_tests PRIVATE bridge_support)
