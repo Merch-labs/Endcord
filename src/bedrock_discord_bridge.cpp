@@ -36,9 +36,6 @@ using json = nlohmann::json;
 
 namespace {
 using ReplacementList = bridge_support::ReplacementList;
-constexpr auto kBridgeBindHost = "127.0.0.1";
-constexpr int kBridgePort = 8089;
-constexpr size_t kBridgeThreadCount = 4;
 
 struct ServerTemplateStats {
     std::string server_name;
@@ -315,7 +312,7 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
     }
 
     json root = {
-        {"config_version", 8},
+        {"config_version", 9},
         {"enabled", true},
         {"discord",
          {{"webhook_url", ""},
@@ -508,26 +505,6 @@ void EndcordPlugin::loadConfig()
 
         if (root.contains("bot_bridge") && root["bot_bridge"].is_object()) {
             const auto &bot_bridge = root["bot_bridge"];
-            if (bot_bridge.contains("enabled") && bot_bridge["enabled"].is_boolean()) {
-                config_.bot_bridge.enabled = bot_bridge["enabled"].get<bool>();
-            }
-            if (bot_bridge.contains("shared_secret") && bot_bridge["shared_secret"].is_string()) {
-                config_.bot_bridge.shared_secret = bot_bridge["shared_secret"].get<std::string>();
-            }
-            if (bot_bridge.contains("api_route_prefix") && bot_bridge["api_route_prefix"].is_string()) {
-                config_.bot_bridge.api_route_prefix = bot_bridge["api_route_prefix"].get<std::string>();
-            }
-            if (bot_bridge.contains("allow_local_requests_only") && bot_bridge["allow_local_requests_only"].is_boolean()) {
-                config_.bot_bridge.allow_local_requests_only = bot_bridge["allow_local_requests_only"].get<bool>();
-            }
-            if (bot_bridge.contains("allowed_remote_addresses") && bot_bridge["allowed_remote_addresses"].is_array()) {
-                config_.bot_bridge.allowed_remote_addresses.clear();
-                for (const auto &entry : bot_bridge["allowed_remote_addresses"]) {
-                    if (entry.is_string()) {
-                        config_.bot_bridge.allowed_remote_addresses.push_back(entry.get<std::string>());
-                    }
-                }
-            }
             if (bot_bridge.contains("inbound_chat_enabled") && bot_bridge["inbound_chat_enabled"].is_boolean()) {
                 config_.bot_bridge.inbound_chat_enabled = bot_bridge["inbound_chat_enabled"].get<bool>();
             }
@@ -569,9 +546,6 @@ void EndcordPlugin::loadConfig()
             if (logging.contains("log_webhook_successes") && logging["log_webhook_successes"].is_boolean()) {
                 config_.logging.log_webhook_successes = logging["log_webhook_successes"].get<bool>();
             }
-            if (logging.contains("log_http_requests") && logging["log_http_requests"].is_boolean()) {
-                config_.logging.log_http_requests = logging["log_http_requests"].get<bool>();
-            }
             if (logging.contains("log_inbound_chat") && logging["log_inbound_chat"].is_boolean()) {
                 config_.logging.log_inbound_chat = logging["log_inbound_chat"].get<bool>();
             }
@@ -580,22 +554,15 @@ void EndcordPlugin::loadConfig()
             }
         }
 
-        if (root.contains("integrated_bot") && root["integrated_bot"].is_object()) {
-            const auto &integrated_bot = root["integrated_bot"];
-            if (integrated_bot.contains("enabled") && integrated_bot["enabled"].is_boolean()) {
-                config_.integrated_bot.enabled = integrated_bot["enabled"].get<bool>();
-            }
-            if (integrated_bot.contains("config_path") && integrated_bot["config_path"].is_string()) {
-                config_.integrated_bot.config_path = integrated_bot["config_path"].get<std::string>();
-            }
+        if (root.contains("bot") && root["bot"].is_object()) {
+            config_.bot = endcord::loadBotConfig(root["bot"]);
         }
-        else if (root.contains("managed_bot") && root["managed_bot"].is_object()) {
-            const auto &managed_bot = root["managed_bot"];
-            if (managed_bot.contains("enabled") && managed_bot["enabled"].is_boolean()) {
-                config_.integrated_bot.enabled = managed_bot["enabled"].get<bool>();
-            }
-            if (managed_bot.contains("config_path") && managed_bot["config_path"].is_string()) {
-                config_.integrated_bot.config_path = managed_bot["config_path"].get<std::string>();
+        else {
+            const auto legacy_bot_config_path = getDataFolder() / "bot" / "config.json";
+            if (fs::exists(legacy_bot_config_path)) {
+                config_.bot = endcord::loadBotConfig(legacy_bot_config_path);
+                getLogger().warning("Loaded legacy external bot config from '{}'. Move it into the top-level 'bot' config section.",
+                                    legacy_bot_config_path.string());
             }
         }
     }
@@ -614,10 +581,6 @@ void EndcordPlugin::loadConfig()
     config_.queue.write_timeout_ms = std::max(config_.queue.write_timeout_ms, 100);
     config_.avatar.size = std::clamp(config_.avatar.size, 8, 512);
     config_.avatar.provider = bridge_support::normalizeAvatarProvider(config_.avatar.provider);
-    config_.bot_bridge.api_route_prefix =
-        normalizeRoutePrefix(config_.bot_bridge.api_route_prefix.empty() ? "/endcord/api"
-                                                                         : config_.bot_bridge.api_route_prefix);
-    config_.bot_bridge.shared_secret = normalizeSecret(config_.bot_bridge.shared_secret);
     config_.bot_bridge.inbound_chat_max_length = std::clamp(config_.bot_bridge.inbound_chat_max_length, 1, 4000);
     config_.bot_bridge.outbound_system_message_max_batch =
         std::clamp(config_.bot_bridge.outbound_system_message_max_batch, 1, 100);
@@ -640,10 +603,6 @@ void EndcordPlugin::loadConfig()
     }
     else {
         clearWebhookState();
-    }
-
-    if (config_.bot_bridge.enabled && config_.bot_bridge.shared_secret.empty()) {
-        getLogger().warning("Bot bridge is enabled but bot_bridge.shared_secret is empty. Bot API endpoints will reject requests.");
     }
 
     getLogger().info("Loaded config version {} from '{}'.", config_.config_version, config_path.string());
@@ -726,56 +685,6 @@ void EndcordPlugin::stopWorker()
     webhook_client_.reset();
 }
 
-void EndcordPlugin::startBridgeServer()
-{
-    stopBridgeServer();
-
-    if (!config_.enabled || !config_.bot_bridge.enabled) {
-        return;
-    }
-
-    bridge_server_ = std::make_unique<httplib::Server>();
-    bridge_server_->new_task_queue = [] {
-        const auto thread_count = kBridgeThreadCount;
-        return new httplib::ThreadPool(thread_count);
-    };
-
-    installBotBridgeRoutes();
-
-    bridge_server_->set_logger([this](const auto &req, const auto &res) {
-        if (config_.logging.log_http_requests || res.status >= 400) {
-            getLogger().debug("Bridge HTTP {} {} -> {}", req.method, req.path, res.status);
-        }
-    });
-
-    const auto host = std::string(kBridgeBindHost);
-    const auto port = kBridgePort;
-    bridge_server_thread_ = std::thread([this, host, port] {
-        if (!bridge_server_) {
-            return;
-        }
-
-        if (!bridge_server_->listen(host.c_str(), port)) {
-            getLogger().error("Bridge HTTP server failed to listen on {}:{}.", host, port);
-        }
-    });
-
-    getLogger().info("Bridge HTTP server starting on {}:{}.", host, port);
-}
-
-void EndcordPlugin::stopBridgeServer()
-{
-    if (bridge_server_) {
-        bridge_server_->stop();
-    }
-
-    if (bridge_server_thread_.joinable()) {
-        bridge_server_thread_.join();
-    }
-
-    bridge_server_.reset();
-}
-
 void EndcordPlugin::startIntegratedBot()
 {
     stopIntegratedBot();
@@ -784,24 +693,13 @@ void EndcordPlugin::startIntegratedBot()
         return;
     }
 
-    if (!config_.integrated_bot.enabled) {
-        return;
-    }
-
-    const auto config_path = expandManagedBotPath(config_.integrated_bot.config_path);
-    if (!fs::exists(config_path)) {
-        getLogger().info("Integrated Discord bot config '{}' does not exist yet.", config_path.string());
-        return;
-    }
-
     try {
-        const auto bot_config = endcord::loadBotConfig(config_path);
         integrated_bot_ = std::make_unique<endcord::IntegratedBot>(
             [this](const std::string &message) { getLogger().info("{}", message); },
             [this](const std::string &message) { getLogger().warning("{}", message); });
 
         const auto started = integrated_bot_->start(
-            bot_config,
+            config_.bot,
             {
                 [this]() { return buildBridgeStatusPayload(); },
                 [this](const std::string &author, const std::string &content, const std::string &channel,
@@ -835,16 +733,6 @@ void EndcordPlugin::stopIntegratedBot()
 
     integrated_bot_->stop();
     integrated_bot_.reset();
-}
-
-void EndcordPlugin::startManagedBot()
-{
-    startIntegratedBot();
-}
-
-void EndcordPlugin::stopManagedBot()
-{
-    stopIntegratedBot();
 }
 
 void EndcordPlugin::workerLoop()
@@ -929,7 +817,7 @@ void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &playe
         avatar_url = getOrCreateAvatarUrl(player);
     }
 
-    if (config_.bot_bridge.enabled && config_.bot_bridge.outbound_system_messages_enabled) {
+    if (config_.bot_bridge.outbound_system_messages_enabled) {
         enqueueBotSystemMessage(event_name, player.getName(), content);
         return;
     }
@@ -1038,11 +926,9 @@ void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
     sender.sendMessage("Bot system message queue max: {}", config_.bot_bridge.outbound_system_message_queue_max_size);
     sender.sendMessage("Avatar support enabled: {}", config_.avatar.enabled ? "yes" : "no");
     sender.sendMessage("Avatar provider: {}", config_.avatar.provider);
-    sender.sendMessage("Bridge HTTP server running: {}", (bridge_server_ && bridge_server_->is_running()) ? "yes" : "no");
-    sender.sendMessage("Bot bridge enabled: {}", config_.bot_bridge.enabled ? "yes" : "no");
-    sender.sendMessage("Bot bridge API prefix: {}", config_.bot_bridge.api_route_prefix);
-    sender.sendMessage("Integrated bot enabled: {}", config_.integrated_bot.enabled ? "yes" : "no");
-    sender.sendMessage("Integrated bot running: {}", isManagedBotRunning() ? "yes" : "no");
+    sender.sendMessage("Integrated bot token configured: {}",
+                       (!config_.bot.discord.token.empty() && config_.bot.discord.token != "replace-me") ? "yes" : "no");
+    sender.sendMessage("Integrated bot running: {}", (integrated_bot_ && integrated_bot_->isRunning()) ? "yes" : "no");
 }
 
 void EndcordPlugin::enqueueWebhookPayload(WebhookJob job)
@@ -1124,30 +1010,6 @@ void EndcordPlugin::processWebhookJob(WebhookJob job)
     getLogger().warning("Discord webhook rejected payload for '{}' with status {}.", job.player_name, result->status);
 }
 
-void EndcordPlugin::installBotBridgeRoutes()
-{
-    if (!bridge_server_ || !config_.bot_bridge.enabled) {
-        return;
-    }
-
-    bridge_server_->Get(config_.bot_bridge.api_route_prefix + "/status",
-                        [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeStatus(req, res); });
-    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/chat",
-                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeChat(req, res); });
-    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/command",
-                         [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeCommand(req, res); });
-    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/system-messages/drain",
-                         [this](const httplib::Request &req, httplib::Response &res) {
-                             handleBotBridgeDrainSystemMessages(req, res);
-                         });
-    bridge_server_->Post(config_.bot_bridge.api_route_prefix + "/webhook",
-                         [this](const httplib::Request &req, httplib::Response &res) {
-                             handleBotBridgeConfigureWebhook(req, res);
-                         });
-    bridge_server_->Get(config_.bot_bridge.api_route_prefix + "/healthz",
-                        [this](const httplib::Request &req, httplib::Response &res) { handleBotBridgeHealth(req, res); });
-}
-
 nlohmann::json EndcordPlugin::buildBridgeStatusPayload() const
 {
     json online_player_names = json::array();
@@ -1194,11 +1056,11 @@ nlohmann::json EndcordPlugin::buildBridgeStatusPayload() const
                  {"bot_system_messages_enabled", config_.bot_bridge.outbound_system_messages_enabled},
                  {"avatar_enabled", config_.avatar.enabled},
                  {"avatar_provider", config_.avatar.provider},
-                 {"bot_bridge_enabled", config_.bot_bridge.enabled},
-                 {"integrated_bot_enabled", config_.integrated_bot.enabled},
+                 {"bot_bridge_enabled", true},
+                 {"integrated_bot_enabled", true},
                  {"integrated_bot_running", integrated_bot_ && integrated_bot_->isRunning()},
-                 {"managed_bot_enabled", config_.integrated_bot.enabled},
-                 {"managed_bot_running", integrated_bot_ && integrated_bot_->isRunning()}});
+                 {"managed_bot_enabled", false},
+                 {"managed_bot_running", false}});
 }
 
 nlohmann::json EndcordPlugin::relayDiscordChat(const std::string &author, const std::string &content,
@@ -1331,204 +1193,6 @@ nlohmann::json EndcordPlugin::configureRuntimeWebhook(const std::string &webhook
     startWorker();
 
     return {{"ok", true}, {"webhook_configured", true}, {"runtime_override", true}};
-}
-
-void EndcordPlugin::handleBotBridgeChat(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeRequest(req, res)) {
-        return;
-    }
-
-    json body;
-    try {
-        body = json::parse(req.body);
-    }
-    catch (const std::exception &e) {
-        res.status = 400;
-        res.set_content(json({{"ok", false}, {"error", std::string("invalid json: ") + e.what()}}).dump(),
-                        "application/json");
-        return;
-    }
-
-    const auto author = body.value("author", "");
-    auto content = body.value("content", "");
-    const auto channel = body.value("channel_name", "discord");
-    const auto guild = body.value("guild_name", "");
-    const auto message_url = body.value("message_url", "");
-    const auto author_id = body.value("author_id", "");
-    const auto channel_id = body.value("channel_id", "");
-    const auto guild_id = body.value("guild_id", "");
-    const auto message_id = body.value("message_id", "");
-    auto result = relayDiscordChat(author, content, channel, guild, message_url, author_id, channel_id, guild_id, message_id);
-    res.status = result.value("ok", false) ? 200 : 400;
-    if (!result.value("ok", false) && result.value("error", std::string()) == "inbound chat relay disabled") {
-        res.status = 403;
-    }
-    else if (!result.value("ok", false) &&
-             result.value("error", std::string()).find("timed out waiting for main-thread chat relay") != std::string::npos) {
-        res.status = 504;
-    }
-    res.set_content(result.dump(), "application/json");
-}
-
-void EndcordPlugin::handleBotBridgeCommand(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeRequest(req, res)) {
-        return;
-    }
-
-    json body;
-    try {
-        body = json::parse(req.body);
-    }
-    catch (const std::exception &e) {
-        res.status = 400;
-        res.set_content(json({{"ok", false}, {"error", std::string("invalid json: ") + e.what()}}).dump(),
-                        "application/json");
-        return;
-    }
-
-    const auto actor = body.value("actor_name", "discord");
-    const auto command_line = body.value("command", "");
-    auto result = executeDiscordCommand(actor, command_line);
-    res.status = result.value("ok", false) ? 200 : 400;
-    if (!result.value("ok", false) && result.value("error", std::string()) == "remote command relay disabled") {
-        res.status = 403;
-    }
-    else if (!result.value("ok", false) &&
-             result.value("error", std::string()).find("timed out waiting for main-thread command execution") !=
-                 std::string::npos) {
-        res.status = 504;
-    }
-    res.set_content(result.dump(), "application/json");
-}
-
-void EndcordPlugin::handleBotBridgeStatus(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeRequest(req, res)) {
-        return;
-    }
-    res.status = 200;
-    res.set_content(buildBridgeStatusPayload().dump(), "application/json");
-}
-
-void EndcordPlugin::handleBotBridgeDrainSystemMessages(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeRequest(req, res)) {
-        return;
-    }
-    auto result = drainPendingSystemMessages();
-    res.status = result.value("ok", false) ? 200 : 403;
-    res.set_content(result.dump(), "application/json");
-}
-
-void EndcordPlugin::handleBotBridgeConfigureWebhook(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeRequest(req, res)) {
-        return;
-    }
-
-    json body;
-    try {
-        body = json::parse(req.body);
-    }
-    catch (const std::exception &e) {
-        res.status = 400;
-        res.set_content(json({{"ok", false}, {"error", std::string("invalid json: ") + e.what()}}).dump(),
-                        "application/json");
-        return;
-    }
-
-    auto result = configureRuntimeWebhook(body.value("webhook_url", ""));
-    res.status = result.value("ok", false) ? 200 : 400;
-    if (!result.value("ok", false) && result.value("error", std::string()) == "runtime webhook override disabled") {
-        res.status = 403;
-    }
-    res.set_content(result.dump(), "application/json");
-}
-
-void EndcordPlugin::handleBotBridgeHealth(const httplib::Request &req, httplib::Response &res)
-{
-    if (!isAuthorizedBotBridgeHealthRequest(req)) {
-        res.status = 403;
-        res.set_content(R"({"ok":false,"error":"request is not from an allowed address"})", "application/json");
-        return;
-    }
-
-    std::size_t queue_depth = 0;
-    {
-        std::lock_guard lock(queue_mutex_);
-        queue_depth = webhook_queue_.size();
-    }
-
-    res.status = 200;
-    res.set_content(json({{"ok", true},
-                          {"server_running", true},
-                          {"bridge_server_running", bridge_server_ && bridge_server_->is_running()},
-                          {"webhook_worker_running", worker_thread_.joinable()},
-                          {"webhook_configured", webhook_target_.has_value()},
-                          {"webhook_queue_depth", queue_depth},
-                          {"integrated_bot_enabled", config_.integrated_bot.enabled},
-                          {"integrated_bot_running", isManagedBotRunning()},
-                          {"managed_bot_enabled", config_.integrated_bot.enabled},
-                          {"managed_bot_running", isManagedBotRunning()}})
-                        .dump(),
-                    "application/json");
-}
-
-bool EndcordPlugin::isAuthorizedBotBridgeRequest(const httplib::Request &req, httplib::Response &res) const
-{
-    if (!config_.bot_bridge.enabled) {
-        res.status = 403;
-        res.set_content(R"({"ok":false,"error":"bot bridge disabled"})", "application/json");
-        return false;
-    }
-
-    const bool remote_is_loopback = isLoopbackAddress(req.remote_addr);
-    const bool remote_is_allowlisted =
-        bridge_support::isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
-
-    if (config_.bot_bridge.allow_local_requests_only && !remote_is_loopback && !remote_is_allowlisted) {
-        res.status = 403;
-        res.set_content(R"({"ok":false,"error":"request is not from a loopback or allowlisted address"})",
-                        "application/json");
-        return false;
-    }
-    if (!config_.bot_bridge.allow_local_requests_only && !config_.bot_bridge.allowed_remote_addresses.empty() &&
-        !remote_is_allowlisted && !remote_is_loopback) {
-        res.status = 403;
-        res.set_content(R"({"ok":false,"error":"request is not from an allowed remote address"})", "application/json");
-        return false;
-    }
-
-    const auto expected_secret = normalizeSecret(config_.bot_bridge.shared_secret);
-    if (expected_secret.empty()) {
-        res.status = 503;
-        res.set_content(R"({"ok":false,"error":"bot bridge secret is not configured"})", "application/json");
-        return false;
-    }
-
-    auto provided_secret = normalizeSecret(req.get_header_value("X-Bridge-Secret"));
-    if (provided_secret.empty()) {
-        auto authorization = req.get_header_value("Authorization");
-        if (authorization.starts_with("Bearer ")) {
-            provided_secret = normalizeSecret(authorization.substr(7));
-        }
-    }
-
-    if (provided_secret != expected_secret) {
-        res.status = 401;
-        res.set_content(R"({"ok":false,"error":"invalid bridge secret"})", "application/json");
-        return false;
-    }
-
-    return true;
-}
-
-bool EndcordPlugin::isAuthorizedBotBridgeHealthRequest(const httplib::Request &req) const
-{
-    return isLoopbackAddress(req.remote_addr) ||
-           bridge_support::isAllowedRemoteAddress(req.remote_addr, config_.bot_bridge.allowed_remote_addresses);
 }
 
 void EndcordPlugin::loadWebhookState()
@@ -1672,61 +1336,9 @@ std::optional<std::int64_t> EndcordPlugin::parseRetryDelayMsFromBody(const std::
     return parseRetryDelayMs(match[1].str());
 }
 
-std::string EndcordPlugin::normalizeRoutePrefix(const std::string &value)
-{
-    if (value.empty() || value == "/") {
-        return "/avatars";
-    }
-
-    std::string route = value;
-    if (!route.starts_with('/')) {
-        route.insert(route.begin(), '/');
-    }
-    while (route.size() > 1 && route.ends_with('/')) {
-        route.pop_back();
-    }
-    return route;
-}
-
-std::string EndcordPlugin::normalizeSecret(std::string value)
-{
-    value.erase(value.begin(),
-                std::find_if(value.begin(), value.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-    value.erase(std::find_if(value.rbegin(), value.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(),
-                value.end());
-    return value;
-}
-
-std::filesystem::path EndcordPlugin::expandManagedBotPath(const std::string &value) const
-{
-    std::string expanded = value;
-    const auto plugin_data = getDataFolder().string();
-    auto position = expanded.find("{plugin_data}");
-    while (position != std::string::npos) {
-        expanded.replace(position, std::string("{plugin_data}").size(), plugin_data);
-        position = expanded.find("{plugin_data}", position + plugin_data.size());
-    }
-    return fs::path(expanded).lexically_normal();
-}
-
-bool EndcordPlugin::isManagedBotRunning() const
-{
-    return integrated_bot_ && integrated_bot_->isRunning();
-}
-
-bool EndcordPlugin::isLoopbackAddress(const std::string &host)
-{
-    return host == "127.0.0.1" || host == "::1" || host == "::ffff:127.0.0.1" || host == "localhost";
-}
-
 std::filesystem::path EndcordPlugin::getConfigPath() const
 {
     return getDataFolder() / "config.json";
-}
-
-std::filesystem::path EndcordPlugin::getBotConfigPath() const
-{
-    return getDataFolder() / "bot" / "config.json";
 }
 
 std::filesystem::path EndcordPlugin::getWebhookStatePath() const
