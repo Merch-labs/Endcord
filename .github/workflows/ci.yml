@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   plugin-linux:
-    name: Build Endstone Plugin
+    name: Build Endcord
     runs-on: ubuntu-24.04
 
     steps:
@@ -27,16 +27,19 @@ jobs:
       - name: Bootstrap local libc++ toolchain
         run: ./scripts/setup-local-libcxx.sh
 
-      - name: Configure plugin build
+      - name: Configure
         run: cmake --preset linux-clang-local-libcxx
 
-      - name: Build plugin
-        run: cmake --build --preset build-local
+      - name: Build
+        run: cmake --build --preset build-local -j4
 
-      - name: Verify plugin artifact
+      - name: Run tests
+        run: ctest --test-dir build-local --output-on-failure
+
+      - name: Verify artifact
         run: test -f build-local/endstone_endcord.so
 
-      - name: Upload plugin artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: endstone-endcord-linux
@@ -44,41 +47,3 @@ jobs:
             build-local/endstone_endcord.so
             config/config.json.example
             config/config.schema.json
-
-  bot-python:
-    name: Build Companion Bot
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install bot package
-        run: python -m pip install -e ./bot
-
-      - name: Build distributable package
-        run: |
-          python -m pip install build
-          python -m build ./bot
-
-      - name: Compile bot sources
-        run: python -m compileall bot/src
-
-      - name: Verify bot CLI
-        run: endcord-bot --help
-
-      - name: Upload bot artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: endcord-bot-python
-          path: |
-            bot/dist/*
-            bot/config.schema.json
-            bot/scripts/bootstrap-local-runtime.sh
-            bot/scripts/run-local-runtime.sh
-            bot/systemd/endcord-bot.service.example
