@@ -7,10 +7,12 @@ It now runs everything inside the plugin:
 - Minecraft -> Discord webhook relay
 - Discord -> Minecraft relay
 - Discord slash commands
-- bot presence updates
+- embedded bot presence updates
 - webhook auto-provisioning
 
 You do not need Python, Docker, a separate bot service, or any extra helper container for the normal setup.
+
+The current integrated setup is tested on Endstone `0.11.2` and Minecraft Bedrock `1.26.3.1`.
 
 ## Quick Start
 
@@ -47,7 +49,6 @@ cp config/config.json.example /path/to/bedrock_server/plugins/endcord/config.jso
 
 The minimum fields most people need to change are:
 
-- `discord.webhook_url`
 - `bot.discord.token`
 - `bot.discord.relay_channel_ids`
 
@@ -57,6 +58,11 @@ Good defaults to keep:
 - `bot.discord.auto_create_webhook = true`
 - `bot.discord.guild_id = 0`
 - `bot_bridge.inbound_chat_template = "[Discord] <{author}> {content}"`
+
+Optional:
+
+- `discord.webhook_url`
+  Use this only if you want to pin a specific webhook manually. In the normal setup, Endcord can create or reuse one automatically.
 
 ### 4. Restart the server
 
@@ -196,16 +202,30 @@ Check:
 
 ## Build From Source
 
+For local Linux development:
+
 ```bash
 cmake --preset linux-clang-local-libcxx
 cmake --build --preset build-local -j4
 ctest --test-dir build-local --output-on-failure
 ```
 
-Expected artifact:
+Expected local artifact:
 
 ```text
 build-local/endstone_endcord.so
+```
+
+For deployment to Dockerized Endstone servers or other hosts that need a Debian 12 compatible build:
+
+```bash
+./scripts/build-plugin-debian12.sh
+```
+
+Expected deployment artifact:
+
+```text
+build-debian12/endstone_endcord.so
 ```
 
 ## Files
