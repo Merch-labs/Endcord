@@ -42,7 +42,7 @@
   "bot_bridge": {
     "inbound_chat_enabled": true,
     "command_enabled": true,
-    "outbound_system_messages_enabled": false,
+    "outbound_system_messages_enabled": true,
     "inbound_chat_template": "[Discord] <{author}> {content}",
     "inbound_chat_max_length": 2000,
     "outbound_system_message_max_batch": 20,
@@ -131,7 +131,7 @@
       "log_presence_updates": false
     },
     "system_messages": {
-      "enabled": false,
+      "enabled": true,
       "channel_id": 0,
       "poll_interval_seconds": 2,
       "failure_backoff_seconds": 5,

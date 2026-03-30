@@ -351,7 +351,7 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
         {"bot_bridge",
          {{"inbound_chat_enabled", true},
           {"command_enabled", true},
-          {"outbound_system_messages_enabled", false},
+          {"outbound_system_messages_enabled", true},
           {"inbound_chat_template", "[Discord] <{author}> {content}"},
           {"inbound_chat_max_length", 2000},
           {"outbound_system_message_max_batch", 20},

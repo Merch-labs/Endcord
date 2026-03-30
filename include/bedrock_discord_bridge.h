@@ -88,7 +88,7 @@ private:
     struct BotBridgeOptions {
         bool inbound_chat_enabled = true;
         bool command_enabled = true;
-        bool outbound_system_messages_enabled = false;
+        bool outbound_system_messages_enabled = true;
         std::string inbound_chat_template = "[Discord] <{author}> {content}";
         int inbound_chat_max_length = 2000;
         int outbound_system_message_max_batch = 20;

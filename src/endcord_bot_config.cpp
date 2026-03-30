@@ -116,7 +116,7 @@ nlohmann::json buildDefaultBotConfigJson()
           {"log_relay_successes", false},
           {"log_presence_updates", false}}},
         {"system_messages",
-         {{"enabled", false},
+         {{"enabled", true},
           {"channel_id", 0},
           {"poll_interval_seconds", 2},
           {"failure_backoff_seconds", 5},
@@ -199,7 +199,7 @@ BotConfig loadBotConfig(const nlohmann::json &root)
     config.logging.log_relay_successes = logging_cfg.value("log_relay_successes", false);
     config.logging.log_presence_updates = logging_cfg.value("log_presence_updates", false);
 
-    config.system_messages.enabled = system_cfg.value("enabled", false);
+    config.system_messages.enabled = system_cfg.value("enabled", true);
     config.system_messages.channel_id = system_cfg.value("channel_id", 0ULL);
     config.system_messages.poll_interval_seconds = std::max(system_cfg.value("poll_interval_seconds", 2), 1);
     config.system_messages.failure_backoff_seconds = std::max(system_cfg.value("failure_backoff_seconds", 5), 1);

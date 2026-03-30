@@ -76,7 +76,7 @@ struct LoggingRuntimeConfig {
 };
 
 struct SystemMessageRuntimeConfig {
-    bool enabled = false;
+    bool enabled = true;
     std::uint64_t channel_id = 0;
     int poll_interval_seconds = 2;
     int failure_backoff_seconds = 5;
