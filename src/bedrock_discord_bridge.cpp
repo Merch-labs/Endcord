@@ -1128,8 +1128,8 @@ nlohmann::json EndcordPlugin::executeDiscordCommand(const std::string &actor, co
         auto &console = getServer().getCommandSender();
         endstone::CommandSenderWrapper wrapper(
             console,
-            [&result](const endstone::Message &message) { result.output.push_back(messageToPlainText(message)); },
-            [&result](const endstone::Message &message) { result.errors.push_back(messageToPlainText(message)); });
+            [this, &result](const endstone::Message &message) { result.output.push_back(messageToPlainText(message)); },
+            [this, &result](const endstone::Message &message) { result.errors.push_back(messageToPlainText(message)); });
 
         if (config_.logging.log_remote_commands) {
             getLogger().info("Executing remote Discord command from '{}': {}", actor, safe_command_line);
@@ -1344,15 +1344,20 @@ std::filesystem::path EndcordPlugin::getWebhookStatePath() const
     return getDataFolder() / "runtime_webhook.json";
 }
 
-std::string EndcordPlugin::messageToPlainText(const endstone::Message &message)
+std::string EndcordPlugin::messageToPlainText(const endstone::Message &message) const
 {
     return std::visit(
-        [](const auto &value) -> std::string {
+        [this](const auto &value) -> std::string {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, std::string>) {
                 return value;
             }
             else {
+                const auto translated = getServer().getLanguage().translate(value);
+                if (!translated.empty()) {
+                    return translated;
+                }
+
                 std::string rendered = value.getText();
                 if (!value.getParameters().empty()) {
                     rendered += " [";

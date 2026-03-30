@@ -168,7 +168,7 @@ private:
     static std::optional<WebhookTarget> parseWebhookUrl(const std::string &url);
     static std::optional<std::int64_t> parseRetryDelayMs(const std::string &value);
     static std::optional<std::int64_t> parseRetryDelayMsFromBody(const std::string &body);
-    static std::string messageToPlainText(const endstone::Message &message);
+    std::string messageToPlainText(const endstone::Message &message) const;
     static std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes);
 
     std::filesystem::path getConfigPath() const;
