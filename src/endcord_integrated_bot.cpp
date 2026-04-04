@@ -259,10 +259,32 @@ struct IntegratedBot::Impl {
         return resolved_guild_id;
     }
 
+    std::uint64_t resolvedOutboundChannelId() const
+    {
+        std::lock_guard<std::mutex> lock(state_mutex);
+        return resolved_outbound_channel_id;
+    }
+
     void setResolvedGuildId(std::uint64_t guild_id)
     {
         std::lock_guard<std::mutex> lock(state_mutex);
         resolved_guild_id = guild_id;
+    }
+
+    void setResolvedOutboundChannelId(std::uint64_t channel_id)
+    {
+        std::lock_guard<std::mutex> lock(state_mutex);
+        resolved_outbound_channel_id = channel_id;
+    }
+
+    std::uint64_t configuredRelayChannelId() const
+    {
+        for (const auto channel_id : config.discord.relay_channel_ids) {
+            if (channel_id != 0) {
+                return channel_id;
+            }
+        }
+        return 0;
     }
 
     std::uint64_t getOutboundChannelId() const
@@ -270,13 +292,13 @@ struct IntegratedBot::Impl {
         if (config.discord.outbound_channel_id != 0) {
             return config.discord.outbound_channel_id;
         }
-        if (!config.discord.relay_channel_ids.empty()) {
-            return config.discord.relay_channel_ids.front();
+        if (const auto configured_relay_channel_id = configuredRelayChannelId(); configured_relay_channel_id != 0) {
+            return configured_relay_channel_id;
         }
         if (config.system_messages.channel_id != 0) {
             return config.system_messages.channel_id;
         }
-        return 0;
+        return resolvedOutboundChannelId();
     }
 
     std::uint64_t getSystemChannelId() const
@@ -284,10 +306,176 @@ struct IntegratedBot::Impl {
         if (config.system_messages.channel_id != 0) {
             return config.system_messages.channel_id;
         }
-        if (!config.discord.relay_channel_ids.empty()) {
-            return config.discord.relay_channel_ids.front();
+        if (const auto configured_relay_channel_id = configuredRelayChannelId(); configured_relay_channel_id != 0) {
+            return configured_relay_channel_id;
         }
-        return 0;
+        return resolvedOutboundChannelId();
+    }
+
+    std::uint64_t resolvePreferredGuildId() const
+    {
+        if (config.discord.guild_id != 0) {
+            return config.discord.guild_id;
+        }
+        return resolvedGuildId();
+    }
+
+    static bool isWebhookCandidateChannel(const dpp::channel &channel)
+    {
+        return channel.is_text_channel() || channel.is_news_channel();
+    }
+
+    void ensureWebhookBindingForChannel(std::uint64_t channel_id)
+    {
+        if (!cluster || channel_id == 0 || !config.discord.auto_create_webhook) {
+            return;
+        }
+
+        cluster->get_channel_webhooks(channel_id, [this, channel_id](const dpp::confirmation_callback_t &callback) {
+            if (callback.is_error()) {
+                owner->warning_logger_("Failed to list channel webhooks for channel " + std::to_string(channel_id) + ": " +
+                                       callback.get_error().message);
+                return;
+            }
+
+            const auto webhooks = callback.get<dpp::webhook_map>();
+            for (const auto &[id, webhook] : webhooks) {
+                (void)id;
+                if (webhook.name == config.discord.webhook_name && !webhook.url.empty()) {
+                    try {
+                        configureWebhook(webhook.url);
+                        owner->info_logger_("Bound existing Discord webhook '" + webhook.name + "' to Endcord.");
+                    }
+                    catch (const std::exception &ex) {
+                        owner->warning_logger_("Failed to configure existing webhook: " + std::string(ex.what()));
+                    }
+                    return;
+                }
+            }
+
+            dpp::webhook webhook;
+            webhook.channel_id = channel_id;
+            webhook.name = config.discord.webhook_name;
+            cluster->create_webhook(webhook, [this](const dpp::confirmation_callback_t &create_callback) {
+                if (create_callback.is_error()) {
+                    owner->warning_logger_("Failed to create Discord webhook: " + create_callback.get_error().message);
+                    return;
+                }
+
+                const auto webhook = create_callback.get<dpp::webhook>();
+                if (webhook.url.empty()) {
+                    owner->warning_logger_("Discord returned a webhook without a usable URL.");
+                    return;
+                }
+
+                try {
+                    configureWebhook(webhook.url);
+                    owner->info_logger_("Created and bound Discord webhook '" + webhook.name + "'.");
+                }
+                catch (const std::exception &ex) {
+                    owner->warning_logger_("Failed to configure new webhook: " + std::string(ex.what()));
+                }
+            });
+        });
+    }
+
+    void selectFallbackChannelFromGuild(std::uint64_t guild_id)
+    {
+        if (!cluster || guild_id == 0) {
+            return;
+        }
+
+        cluster->channels_get(guild_id, [this, guild_id](const dpp::confirmation_callback_t &callback) {
+            if (callback.is_error()) {
+                owner->warning_logger_("Failed to list channels for guild " + std::to_string(guild_id) + ": " +
+                                       callback.get_error().message);
+                return;
+            }
+
+            std::vector<dpp::channel> candidates;
+            for (const auto &[id, channel] : callback.get<dpp::channel_map>()) {
+                (void)id;
+                if (isWebhookCandidateChannel(channel)) {
+                    candidates.push_back(channel);
+                }
+            }
+
+            if (candidates.empty()) {
+                owner->warning_logger_("Could not auto-select an outbound Discord channel because guild " +
+                                       std::to_string(guild_id) + " has no text-compatible channels.");
+                return;
+            }
+
+            std::sort(candidates.begin(), candidates.end(), [](const dpp::channel &lhs, const dpp::channel &rhs) {
+                if (lhs.position != rhs.position) {
+                    return lhs.position < rhs.position;
+                }
+                if (lhs.name != rhs.name) {
+                    return lhs.name < rhs.name;
+                }
+                return lhs.id < rhs.id;
+            });
+
+            const auto &chosen = candidates.front();
+            setResolvedOutboundChannelId(chosen.id);
+            owner->info_logger_("Auto-selected outbound Discord channel '" + chosen.name + "' (" +
+                                std::to_string(chosen.id) + ") for Endcord.");
+            ensureWebhookBindingForChannel(chosen.id);
+        });
+    }
+
+    void deriveGuildFromAnyAvailableSource()
+    {
+        if (!cluster) {
+            return;
+        }
+
+        cluster->current_user_get_guilds([this](const dpp::confirmation_callback_t &callback) {
+            if (callback.is_error()) {
+                owner->warning_logger_("Failed to resolve a default guild for Endcord: " + callback.get_error().message);
+                return;
+            }
+
+            std::vector<dpp::guild> guilds;
+            for (const auto &[id, guild] : callback.get<dpp::guild_map>()) {
+                (void)id;
+                guilds.push_back(guild);
+            }
+
+            if (guilds.empty()) {
+                owner->warning_logger_("Could not auto-resolve a Discord guild because the bot is not in any guilds.");
+                return;
+            }
+
+            std::sort(guilds.begin(), guilds.end(), [](const dpp::guild &lhs, const dpp::guild &rhs) {
+                if (lhs.name != rhs.name) {
+                    return lhs.name < rhs.name;
+                }
+                return lhs.id < rhs.id;
+            });
+
+            const auto &chosen = guilds.front();
+            setResolvedGuildId(chosen.id);
+            owner->info_logger_("Auto-derived discord.guild_id=" + std::to_string(chosen.id) + " from guild '" +
+                                chosen.name + "'.");
+            syncCommandsIfNeeded();
+            selectFallbackChannelFromGuild(chosen.id);
+        });
+    }
+
+    void ensureResolvedOutboundChannel()
+    {
+        if (getOutboundChannelId() != 0) {
+            return;
+        }
+
+        const auto guild_id = resolvePreferredGuildId();
+        if (guild_id != 0) {
+            selectFallbackChannelFromGuild(guild_id);
+            return;
+        }
+
+        deriveGuildFromAnyAvailableSource();
     }
 
     bool isAuthorized(const dpp::slashcommand_t &event, const SlashCommandRuleConfig &rule) const
@@ -408,6 +596,7 @@ struct IntegratedBot::Impl {
 
         const auto channel_id = getOutboundChannelId();
         if (channel_id == 0) {
+            deriveGuildFromAnyAvailableSource();
             return;
         }
 
@@ -433,55 +622,12 @@ struct IntegratedBot::Impl {
 
         const auto channel_id = getOutboundChannelId();
         if (channel_id == 0) {
-            owner->warning_logger_("Skipping webhook provisioning because no outbound Discord channel is configured.");
+            owner->warning_logger_("No outbound Discord channel is configured; attempting automatic channel selection.");
+            ensureResolvedOutboundChannel();
             return;
         }
 
-        cluster->get_channel_webhooks(channel_id, [this, channel_id](const dpp::confirmation_callback_t &callback) {
-            if (callback.is_error()) {
-                owner->warning_logger_("Failed to list channel webhooks: " + callback.get_error().message);
-                return;
-            }
-
-            const auto webhooks = callback.get<dpp::webhook_map>();
-            for (const auto &[id, webhook] : webhooks) {
-                (void)id;
-                if (webhook.name == config.discord.webhook_name && !webhook.url.empty()) {
-                    try {
-                        configureWebhook(webhook.url);
-                        owner->info_logger_("Bound existing Discord webhook '" + webhook.name + "' to Endcord.");
-                    }
-                    catch (const std::exception &ex) {
-                        owner->warning_logger_("Failed to configure existing webhook: " + std::string(ex.what()));
-                    }
-                    return;
-                }
-            }
-
-            dpp::webhook webhook;
-            webhook.channel_id = channel_id;
-            webhook.name = config.discord.webhook_name;
-            cluster->create_webhook(webhook, [this](const dpp::confirmation_callback_t &create_callback) {
-                if (create_callback.is_error()) {
-                    owner->warning_logger_("Failed to create Discord webhook: " + create_callback.get_error().message);
-                    return;
-                }
-
-                const auto webhook = create_callback.get<dpp::webhook>();
-                if (webhook.url.empty()) {
-                    owner->warning_logger_("Discord returned a webhook without a usable URL.");
-                    return;
-                }
-
-                try {
-                    configureWebhook(webhook.url);
-                    owner->info_logger_("Created and bound Discord webhook '" + webhook.name + "'.");
-                }
-                catch (const std::exception &ex) {
-                    owner->warning_logger_("Failed to configure new webhook: " + std::string(ex.what()));
-                }
-            });
-        });
+        ensureWebhookBindingForChannel(channel_id);
     }
 
     void startThreads()
@@ -690,6 +836,7 @@ struct IntegratedBot::Impl {
     std::thread presence_thread;
     std::thread system_thread;
     std::uint64_t resolved_guild_id = 0;
+    std::uint64_t resolved_outbound_channel_id = 0;
     bool commands_synced = false;
     bool running = false;
 };
@@ -721,6 +868,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
     impl_->config = config;
     impl_->callbacks = std::move(callbacks);
     impl_->resolved_guild_id = 0;
+    impl_->resolved_outbound_channel_id = 0;
     impl_->commands_synced = false;
     impl_->cluster = std::make_unique<dpp::cluster>(config.discord.token, dpp::i_default_intents | dpp::i_message_content);
 
