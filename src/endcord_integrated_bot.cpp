@@ -287,6 +287,38 @@ struct IntegratedBot::Impl {
         return 0;
     }
 
+    std::vector<std::uint64_t> configuredRelayChannelIds() const
+    {
+        std::vector<std::uint64_t> channel_ids;
+        channel_ids.reserve(config.discord.relay_channel_ids.size());
+        for (const auto channel_id : config.discord.relay_channel_ids) {
+            if (channel_id != 0) {
+                channel_ids.push_back(channel_id);
+            }
+        }
+        return channel_ids;
+    }
+
+    bool isRelayChannel(std::uint64_t channel_id) const
+    {
+        if (channel_id == 0) {
+            return false;
+        }
+
+        if (const auto configured_channel_ids = configuredRelayChannelIds(); !configured_channel_ids.empty()) {
+            return std::find(configured_channel_ids.begin(), configured_channel_ids.end(), channel_id) !=
+                   configured_channel_ids.end();
+        }
+
+        if (config.discord.outbound_channel_id != 0 && config.discord.outbound_channel_id == channel_id) {
+            return true;
+        }
+        if (config.system_messages.channel_id != 0 && config.system_messages.channel_id == channel_id) {
+            return true;
+        }
+        return resolvedOutboundChannelId() == channel_id;
+    }
+
     std::uint64_t getOutboundChannelId() const
     {
         if (config.discord.outbound_channel_id != 0) {
@@ -902,9 +934,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
         if (impl_->resolvedGuildId() != 0 && message.guild_id != impl_->resolvedGuildId()) {
             return;
         }
-        if (!config.discord.relay_channel_ids.empty() &&
-            std::find(config.discord.relay_channel_ids.begin(), config.discord.relay_channel_ids.end(),
-                      static_cast<std::uint64_t>(message.channel_id)) == config.discord.relay_channel_ids.end()) {
+        if (!impl_->isRelayChannel(static_cast<std::uint64_t>(message.channel_id))) {
             return;
         }
 
