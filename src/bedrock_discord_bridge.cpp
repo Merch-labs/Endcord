@@ -376,175 +376,64 @@ void EndcordPlugin::loadConfig()
     }
 
     try {
-        json root = json::parse(input);
+        const auto root = json::parse(input);
 
-        if (root.contains("config_version") && root["config_version"].is_number_integer()) {
-            config_.config_version = root["config_version"].get<int>();
-        }
-        if (root.contains("enabled") && root["enabled"].is_boolean()) {
-            config_.enabled = root["enabled"].get<bool>();
-        }
+        config_.config_version = root.value("config_version", config_.config_version);
+        config_.enabled        = root.value("enabled",        config_.enabled);
 
-        if (root.contains("discord") && root["discord"].is_object()) {
-            const auto &discord = root["discord"];
-            if (discord.contains("webhook_url") && discord["webhook_url"].is_string()) {
-                config_.discord.webhook_url = discord["webhook_url"].get<std::string>();
-            }
-            if (discord.contains("allow_runtime_webhook_override") && discord["allow_runtime_webhook_override"].is_boolean()) {
-                config_.discord.allow_runtime_webhook_override = discord["allow_runtime_webhook_override"].get<bool>();
-            }
-            if (discord.contains("username_template") && discord["username_template"].is_string()) {
-                config_.discord.username_template = discord["username_template"].get<std::string>();
-            }
-            if (discord.contains("content_template") && discord["content_template"].is_string()) {
-                config_.discord.content_template = discord["content_template"].get<std::string>();
-            }
-            if (discord.contains("system_username_template") && discord["system_username_template"].is_string()) {
-                config_.discord.system_username_template = discord["system_username_template"].get<std::string>();
-            }
-            if (discord.contains("join_content_template") && discord["join_content_template"].is_string()) {
-                config_.discord.join_content_template = discord["join_content_template"].get<std::string>();
-            }
-            if (discord.contains("quit_content_template") && discord["quit_content_template"].is_string()) {
-                config_.discord.quit_content_template = discord["quit_content_template"].get<std::string>();
-            }
-            if (discord.contains("death_content_template") && discord["death_content_template"].is_string()) {
-                config_.discord.death_content_template = discord["death_content_template"].get<std::string>();
-            }
-            if (discord.contains("allow_mentions") && discord["allow_mentions"].is_boolean()) {
-                config_.discord.allow_mentions = discord["allow_mentions"].get<bool>();
-            }
-            if (discord.contains("use_player_avatar_for_system_messages") &&
-                discord["use_player_avatar_for_system_messages"].is_boolean()) {
-                config_.discord.use_player_avatar_for_system_messages =
-                    discord["use_player_avatar_for_system_messages"].get<bool>();
-            }
-            if (discord.contains("max_username_length") && discord["max_username_length"].is_number_integer()) {
-                config_.discord.max_username_length = discord["max_username_length"].get<int>();
-            }
-            if (discord.contains("max_content_length") && discord["max_content_length"].is_number_integer()) {
-                config_.discord.max_content_length = discord["max_content_length"].get<int>();
-            }
-        }
+        const auto &discord = root.contains("discord") && root["discord"].is_object() ? root["discord"] : json::object();
+        config_.discord.webhook_url                          = discord.value("webhook_url",                          config_.discord.webhook_url);
+        config_.discord.allow_runtime_webhook_override       = discord.value("allow_runtime_webhook_override",       config_.discord.allow_runtime_webhook_override);
+        config_.discord.username_template                    = discord.value("username_template",                    config_.discord.username_template);
+        config_.discord.content_template                     = discord.value("content_template",                     config_.discord.content_template);
+        config_.discord.system_username_template             = discord.value("system_username_template",             config_.discord.system_username_template);
+        config_.discord.join_content_template                = discord.value("join_content_template",                config_.discord.join_content_template);
+        config_.discord.quit_content_template                = discord.value("quit_content_template",                config_.discord.quit_content_template);
+        config_.discord.death_content_template               = discord.value("death_content_template",               config_.discord.death_content_template);
+        config_.discord.allow_mentions                       = discord.value("allow_mentions",                       config_.discord.allow_mentions);
+        config_.discord.use_player_avatar_for_system_messages = discord.value("use_player_avatar_for_system_messages", config_.discord.use_player_avatar_for_system_messages);
+        config_.discord.max_username_length                  = discord.value("max_username_length",                  config_.discord.max_username_length);
+        config_.discord.max_content_length                   = discord.value("max_content_length",                   config_.discord.max_content_length);
 
-        if (root.contains("relay") && root["relay"].is_object()) {
-            const auto &relay = root["relay"];
-            if (relay.contains("minecraft_to_discord_enabled") && relay["minecraft_to_discord_enabled"].is_boolean()) {
-                config_.relay.minecraft_to_discord_enabled = relay["minecraft_to_discord_enabled"].get<bool>();
-            }
-            if (relay.contains("chat_enabled") && relay["chat_enabled"].is_boolean()) {
-                config_.relay.chat_enabled = relay["chat_enabled"].get<bool>();
-            }
-            if (relay.contains("join_enabled") && relay["join_enabled"].is_boolean()) {
-                config_.relay.join_enabled = relay["join_enabled"].get<bool>();
-            }
-            if (relay.contains("quit_enabled") && relay["quit_enabled"].is_boolean()) {
-                config_.relay.quit_enabled = relay["quit_enabled"].get<bool>();
-            }
-            if (relay.contains("death_enabled") && relay["death_enabled"].is_boolean()) {
-                config_.relay.death_enabled = relay["death_enabled"].get<bool>();
-            }
-        }
+        const auto &relay = root.contains("relay") && root["relay"].is_object() ? root["relay"] : json::object();
+        config_.relay.minecraft_to_discord_enabled = relay.value("minecraft_to_discord_enabled", config_.relay.minecraft_to_discord_enabled);
+        config_.relay.chat_enabled                 = relay.value("chat_enabled",                 config_.relay.chat_enabled);
+        config_.relay.join_enabled                 = relay.value("join_enabled",                 config_.relay.join_enabled);
+        config_.relay.quit_enabled                 = relay.value("quit_enabled",                 config_.relay.quit_enabled);
+        config_.relay.death_enabled                = relay.value("death_enabled",                config_.relay.death_enabled);
 
-        if (root.contains("queue") && root["queue"].is_object()) {
-            const auto &queue = root["queue"];
-            if (queue.contains("max_size") && queue["max_size"].is_number_integer()) {
-                config_.queue.max_size = queue["max_size"].get<int>();
-            }
-            if (queue.contains("max_attempts") && queue["max_attempts"].is_number_integer()) {
-                config_.queue.max_attempts = queue["max_attempts"].get<int>();
-            }
-            if (queue.contains("retry_delay_ms") && queue["retry_delay_ms"].is_number_integer()) {
-                config_.queue.retry_delay_ms = queue["retry_delay_ms"].get<int>();
-            }
-            if (queue.contains("connect_timeout_ms") && queue["connect_timeout_ms"].is_number_integer()) {
-                config_.queue.connect_timeout_ms = queue["connect_timeout_ms"].get<int>();
-            }
-            if (queue.contains("read_timeout_ms") && queue["read_timeout_ms"].is_number_integer()) {
-                config_.queue.read_timeout_ms = queue["read_timeout_ms"].get<int>();
-            }
-            if (queue.contains("write_timeout_ms") && queue["write_timeout_ms"].is_number_integer()) {
-                config_.queue.write_timeout_ms = queue["write_timeout_ms"].get<int>();
-            }
-        }
+        const auto &queue = root.contains("queue") && root["queue"].is_object() ? root["queue"] : json::object();
+        config_.queue.max_size          = queue.value("max_size",          config_.queue.max_size);
+        config_.queue.max_attempts      = queue.value("max_attempts",      config_.queue.max_attempts);
+        config_.queue.retry_delay_ms    = queue.value("retry_delay_ms",    config_.queue.retry_delay_ms);
+        config_.queue.connect_timeout_ms = queue.value("connect_timeout_ms", config_.queue.connect_timeout_ms);
+        config_.queue.read_timeout_ms   = queue.value("read_timeout_ms",   config_.queue.read_timeout_ms);
+        config_.queue.write_timeout_ms  = queue.value("write_timeout_ms",  config_.queue.write_timeout_ms);
 
-        if (root.contains("avatar") && root["avatar"].is_object()) {
-            const auto &avatar = root["avatar"];
-            if (avatar.contains("enabled") && avatar["enabled"].is_boolean()) {
-                config_.avatar.enabled = avatar["enabled"].get<bool>();
-            }
-            if (avatar.contains("provider") && avatar["provider"].is_string()) {
-                config_.avatar.provider = avatar["provider"].get<std::string>();
-            }
-            if (avatar.contains("provider_url_template") && avatar["provider_url_template"].is_string()) {
-                config_.avatar.provider_url_template = avatar["provider_url_template"].get<std::string>();
-            }
-            if (avatar.contains("provider_prefer_xuid") && avatar["provider_prefer_xuid"].is_boolean()) {
-                config_.avatar.provider_prefer_xuid = avatar["provider_prefer_xuid"].get<bool>();
-            }
-            if (avatar.contains("provider_render_type") && avatar["provider_render_type"].is_string()) {
-                config_.avatar.provider_render_type = avatar["provider_render_type"].get<std::string>();
-            }
-            if (avatar.contains("provider_bedrock_username_prefix") &&
-                avatar["provider_bedrock_username_prefix"].is_string()) {
-                config_.avatar.provider_bedrock_username_prefix =
-                    avatar["provider_bedrock_username_prefix"].get<std::string>();
-            }
-            if (avatar.contains("size") && avatar["size"].is_number_integer()) {
-                config_.avatar.size = avatar["size"].get<int>();
-            }
-        }
+        const auto &avatar = root.contains("avatar") && root["avatar"].is_object() ? root["avatar"] : json::object();
+        config_.avatar.enabled                       = avatar.value("enabled",                       config_.avatar.enabled);
+        config_.avatar.provider                      = avatar.value("provider",                      config_.avatar.provider);
+        config_.avatar.provider_url_template         = avatar.value("provider_url_template",         config_.avatar.provider_url_template);
+        config_.avatar.provider_prefer_xuid          = avatar.value("provider_prefer_xuid",          config_.avatar.provider_prefer_xuid);
+        config_.avatar.provider_render_type          = avatar.value("provider_render_type",          config_.avatar.provider_render_type);
+        config_.avatar.provider_bedrock_username_prefix = avatar.value("provider_bedrock_username_prefix", config_.avatar.provider_bedrock_username_prefix);
+        config_.avatar.size                          = avatar.value("size",                          config_.avatar.size);
 
-        if (root.contains("bot_bridge") && root["bot_bridge"].is_object()) {
-            const auto &bot_bridge = root["bot_bridge"];
-            if (bot_bridge.contains("inbound_chat_enabled") && bot_bridge["inbound_chat_enabled"].is_boolean()) {
-                config_.bot_bridge.inbound_chat_enabled = bot_bridge["inbound_chat_enabled"].get<bool>();
-            }
-            if (bot_bridge.contains("command_enabled") && bot_bridge["command_enabled"].is_boolean()) {
-                config_.bot_bridge.command_enabled = bot_bridge["command_enabled"].get<bool>();
-            }
-            if (bot_bridge.contains("outbound_system_messages_enabled") &&
-                bot_bridge["outbound_system_messages_enabled"].is_boolean()) {
-                config_.bot_bridge.outbound_system_messages_enabled =
-                    bot_bridge["outbound_system_messages_enabled"].get<bool>();
-            }
-            if (bot_bridge.contains("inbound_chat_template") && bot_bridge["inbound_chat_template"].is_string()) {
-                config_.bot_bridge.inbound_chat_template = bot_bridge["inbound_chat_template"].get<std::string>();
-            }
-            if (bot_bridge.contains("inbound_chat_max_length") &&
-                bot_bridge["inbound_chat_max_length"].is_number_integer()) {
-                config_.bot_bridge.inbound_chat_max_length = bot_bridge["inbound_chat_max_length"].get<int>();
-            }
-            if (bot_bridge.contains("outbound_system_message_max_batch") &&
-                bot_bridge["outbound_system_message_max_batch"].is_number_integer()) {
-                config_.bot_bridge.outbound_system_message_max_batch =
-                    bot_bridge["outbound_system_message_max_batch"].get<int>();
-            }
-            if (bot_bridge.contains("outbound_system_message_queue_max_size") &&
-                bot_bridge["outbound_system_message_queue_max_size"].is_number_integer()) {
-                config_.bot_bridge.outbound_system_message_queue_max_size =
-                    bot_bridge["outbound_system_message_queue_max_size"].get<int>();
-            }
-            if (bot_bridge.contains("request_timeout_ms") && bot_bridge["request_timeout_ms"].is_number_integer()) {
-                config_.bot_bridge.request_timeout_ms = bot_bridge["request_timeout_ms"].get<int>();
-            }
-        }
+        const auto &bot_bridge = root.contains("bot_bridge") && root["bot_bridge"].is_object() ? root["bot_bridge"] : json::object();
+        config_.bot_bridge.inbound_chat_enabled                  = bot_bridge.value("inbound_chat_enabled",                  config_.bot_bridge.inbound_chat_enabled);
+        config_.bot_bridge.command_enabled                       = bot_bridge.value("command_enabled",                       config_.bot_bridge.command_enabled);
+        config_.bot_bridge.outbound_system_messages_enabled      = bot_bridge.value("outbound_system_messages_enabled",      config_.bot_bridge.outbound_system_messages_enabled);
+        config_.bot_bridge.inbound_chat_template                 = bot_bridge.value("inbound_chat_template",                 config_.bot_bridge.inbound_chat_template);
+        config_.bot_bridge.inbound_chat_max_length               = bot_bridge.value("inbound_chat_max_length",               config_.bot_bridge.inbound_chat_max_length);
+        config_.bot_bridge.outbound_system_message_max_batch     = bot_bridge.value("outbound_system_message_max_batch",     config_.bot_bridge.outbound_system_message_max_batch);
+        config_.bot_bridge.outbound_system_message_queue_max_size = bot_bridge.value("outbound_system_message_queue_max_size", config_.bot_bridge.outbound_system_message_queue_max_size);
+        config_.bot_bridge.request_timeout_ms                    = bot_bridge.value("request_timeout_ms",                    config_.bot_bridge.request_timeout_ms);
 
-        if (root.contains("logging") && root["logging"].is_object()) {
-            const auto &logging = root["logging"];
-            if (logging.contains("log_filtered_events") && logging["log_filtered_events"].is_boolean()) {
-                config_.logging.log_filtered_events = logging["log_filtered_events"].get<bool>();
-            }
-            if (logging.contains("log_webhook_successes") && logging["log_webhook_successes"].is_boolean()) {
-                config_.logging.log_webhook_successes = logging["log_webhook_successes"].get<bool>();
-            }
-            if (logging.contains("log_inbound_chat") && logging["log_inbound_chat"].is_boolean()) {
-                config_.logging.log_inbound_chat = logging["log_inbound_chat"].get<bool>();
-            }
-            if (logging.contains("log_remote_commands") && logging["log_remote_commands"].is_boolean()) {
-                config_.logging.log_remote_commands = logging["log_remote_commands"].get<bool>();
-            }
-        }
+        const auto &logging = root.contains("logging") && root["logging"].is_object() ? root["logging"] : json::object();
+        config_.logging.log_filtered_events  = logging.value("log_filtered_events",  config_.logging.log_filtered_events);
+        config_.logging.log_webhook_successes = logging.value("log_webhook_successes", config_.logging.log_webhook_successes);
+        config_.logging.log_inbound_chat     = logging.value("log_inbound_chat",     config_.logging.log_inbound_chat);
+        config_.logging.log_remote_commands  = logging.value("log_remote_commands",  config_.logging.log_remote_commands);
 
         if (root.contains("bot") && root["bot"].is_object()) {
             config_.bot = endcord::loadBotConfig(root["bot"]);
