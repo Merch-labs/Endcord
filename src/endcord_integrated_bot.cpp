@@ -19,8 +19,6 @@
 namespace endcord {
 namespace {
 
-// Discord API hard limit for message content (characters).
-static constexpr std::size_t kDiscordMaxMessageLength = 2000;
 // Safe limit for slash-command replies — leaves headroom for Discord's own
 // formatting overhead so the response is never silently truncated by the API.
 static constexpr std::size_t kDiscordSafeReplyLength = 1800;

@@ -26,6 +26,9 @@ struct PlayerIdentity {
     std::string skin_id;
 };
 
+// Discord API hard limit for message content (code units).
+inline constexpr std::size_t kDiscordMaxMessageLength = 2000;
+
 std::string applyTemplate(std::string value, const ReplacementList &replacements);
 std::string replaceAll(std::string value, const std::string &needle, const std::string &replacement);
 // Truncates value to at most max_bytes bytes, backing up to the nearest valid

@@ -29,9 +29,6 @@ using json = nlohmann::json;
 namespace {
 using ReplacementList = bridge_support::ReplacementList;
 
-// Discord API hard limit for message content (characters).
-static constexpr std::size_t kDiscordMaxMessageLength = 2000;
-
 struct ServerTemplateStats {
     std::string server_name;
     std::string server_version;
