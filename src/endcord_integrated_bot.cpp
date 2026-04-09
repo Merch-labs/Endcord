@@ -50,15 +50,17 @@ std::string joinLines(const std::vector<std::string> &lines)
     return joinStrings(lines, "\n");
 }
 
-std::string truncateText(const std::string &value, std::size_t max_chars)
+// Truncates to at most max_bytes bytes at a UTF-8 boundary, appending "..."
+// when the string is shortened.
+std::string truncateText(const std::string &value, std::size_t max_bytes)
 {
-    if (value.size() <= max_chars) {
+    if (value.size() <= max_bytes) {
         return value;
     }
-    if (max_chars <= 3) {
-        return value.substr(0, max_chars);
+    if (max_bytes <= 3) {
+        return bridge_support::truncateUtf8Bytes(value, max_bytes);
     }
-    return value.substr(0, max_chars - 3) + "...";
+    return bridge_support::truncateUtf8Bytes(value, max_bytes - 3) + "...";
 }
 
 std::string firstNonEmpty(std::initializer_list<std::string> values)
@@ -96,7 +98,8 @@ std::string toTitle(std::string value)
 
 std::string getDisplayName(const dpp::message &message)
 {
-    return firstNonEmpty({message.member.get_nickname(), message.author.global_name, message.author.username});
+    auto name = firstNonEmpty({message.member.get_nickname(), message.author.global_name, message.author.username});
+    return name.empty() ? "Unknown User" : name;
 }
 
 std::string getDisplayName(const dpp::guild_member &member, const dpp::user &user)

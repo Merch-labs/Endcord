@@ -887,7 +887,7 @@ void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string 
         }
         else {
             pending_system_messages_.push_back(
-                {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, kDiscordMaxMessageLength)});
+                {std::move(event_name), std::move(player_name), bridge_support::truncateUtf8Bytes(content, kDiscordMaxMessageLength)});
         }
     }
     if (dropped) {
@@ -1080,7 +1080,7 @@ nlohmann::json EndcordPlugin::relayDiscordChat(const std::string &author, const 
         return {{"ok", false}, {"error", "author and content are required"}};
     }
 
-    auto safe_content = truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
+    auto safe_content = bridge_support::truncateUtf8Bytes(content, static_cast<std::size_t>(config_.bot_bridge.inbound_chat_max_length));
     const auto server_stats = collectServerTemplateStats(getServer());
     const auto formatted = bridge_support::applyTemplate(
         config_.bot_bridge.inbound_chat_template,
@@ -1386,16 +1386,4 @@ std::string EndcordPlugin::messageToPlainText(const endstone::Message &message) 
         message);
 }
 
-std::string EndcordPlugin::truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
-{
-    if (value.size() <= max_bytes) {
-        return value;
-    }
-
-    std::size_t end = max_bytes;
-    while (end > 0 && (static_cast<unsigned char>(value[end]) & 0xC0U) == 0x80U) {
-        --end;
-    }
-    return value.substr(0, end);
-}
 

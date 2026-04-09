@@ -3,6 +3,7 @@
 #include <array>
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <iomanip>
 #include <sstream>
 
@@ -28,6 +29,21 @@ std::string replaceAll(std::string value, const std::string &needle, const std::
         pos += replacement.size();
     }
     return value;
+}
+
+std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
+{
+    if (value.size() <= max_bytes) {
+        return value;
+    }
+    // value.size() > max_bytes here, so value[max_bytes] is a valid index.
+    // Walk backward past any UTF-8 continuation bytes (0x80–0xBF) to find
+    // the start of the character that straddles the boundary.
+    std::size_t end = max_bytes;
+    while (end > 0 && (static_cast<unsigned char>(value[end]) & 0xC0U) == 0x80U) {
+        --end;
+    }
+    return value.substr(0, end);
 }
 
 bool isAllowedRemoteAddress(const std::string &host, const std::vector<std::string> &allowed_patterns)
