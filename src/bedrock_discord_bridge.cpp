@@ -1116,8 +1116,8 @@ nlohmann::json EndcordPlugin::executeDiscordCommand(const std::string &actor, co
     if (safe_command_line.empty()) {
         return {{"ok", false}, {"error", "command is required"}};
     }
-    if (!safe_command_line.empty() && safe_command_line.front() == '/') {
-        safe_command_line.erase(safe_command_line.begin());
+    if (safe_command_line.front() == '/') {
+        safe_command_line = safe_command_line.substr(1);
     }
 
     struct CommandResult {
