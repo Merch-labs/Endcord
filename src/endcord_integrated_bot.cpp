@@ -9,6 +9,7 @@
 #include <atomic>
 #include <chrono>
 #include <cctype>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -687,9 +688,9 @@ struct IntegratedBot::Impl {
                         if (config.presence.update_interval_seconds <= 0) {
                             break;
                         }
-                        for (int i = 0; i < config.presence.update_interval_seconds && !stop_threads; ++i) {
-                            std::this_thread::sleep_for(std::chrono::seconds(1));
-                        }
+                        std::unique_lock<std::mutex> lock(stop_cv_mutex);
+                        stop_cv.wait_for(lock, std::chrono::seconds(config.presence.update_interval_seconds),
+                                         [this] { return stop_threads.load(); });
                     }
                 });
             }
@@ -713,9 +714,9 @@ struct IntegratedBot::Impl {
                                              config.system_messages.max_backoff_seconds);
                         }
 
-                        for (int i = 0; i < delay && !stop_threads; ++i) {
-                            std::this_thread::sleep_for(std::chrono::seconds(1));
-                        }
+                        std::unique_lock<std::mutex> lock(stop_cv_mutex);
+                        stop_cv.wait_for(lock, std::chrono::seconds(delay),
+                                         [this] { return stop_threads.load(); });
                     }
                 });
             }
@@ -727,7 +728,11 @@ struct IntegratedBot::Impl {
 
     void stopThreads()
     {
-        stop_threads = true;
+        {
+            std::lock_guard<std::mutex> lock(stop_cv_mutex);
+            stop_threads = true;
+        }
+        stop_cv.notify_all();
         if (presence_thread.joinable()) {
             presence_thread.join();
         }
@@ -881,6 +886,8 @@ struct IntegratedBot::Impl {
     IntegratedBotCallbacks callbacks{};
     std::unique_ptr<dpp::cluster> cluster;
     mutable std::mutex state_mutex;
+    std::mutex stop_cv_mutex;
+    std::condition_variable stop_cv;
     std::atomic_bool stop_threads{false};
     std::thread presence_thread;
     std::thread system_thread;
