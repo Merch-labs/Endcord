@@ -69,8 +69,8 @@ bool isAllowedRemoteAddress(const std::string &host, const std::vector<std::stri
                 return true;
             }
         }
-        catch (...) {
-            continue;
+        catch (const std::exception &) {
+            continue;  // stoi failed on malformed CIDR prefix length; skip
         }
     }
 
