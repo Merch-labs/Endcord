@@ -1278,17 +1278,6 @@ std::optional<std::string> EndcordPlugin::buildProviderAvatarUrl(const endstone:
     const auto skin = player.getSkin();
     const auto uuid = player.getUniqueId().str();
 
-    if (!config_.avatar.provider_url_template.empty()) {
-        return bridge_support::buildProviderAvatarUrl(
-            {.provider = config_.avatar.provider,
-             .provider_url_template = config_.avatar.provider_url_template,
-             .provider_prefer_xuid = config_.avatar.provider_prefer_xuid,
-             .provider_render_type = config_.avatar.provider_render_type,
-             .provider_bedrock_username_prefix = config_.avatar.provider_bedrock_username_prefix,
-             .size = config_.avatar.size},
-            {.username = username, .xuid = xuid, .uuid = uuid, .skin_id = skin.getId()});
-    }
-
     return bridge_support::buildProviderAvatarUrl(
         {.provider = config_.avatar.provider,
          .provider_url_template = config_.avatar.provider_url_template,
