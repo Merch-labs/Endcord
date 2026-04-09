@@ -921,6 +921,21 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
         return false;
     }
 
+    // Non-fatal warnings — bot starts but operator should be aware.
+    if (config.discord.relay_to_game_enabled) {
+        const bool has_relay_channel = !config.discord.relay_channel_ids.empty() ||
+                                       config.discord.outbound_channel_id != 0 ||
+                                       config.system_messages.channel_id != 0;
+        if (!has_relay_channel) {
+            warning_logger_("No relay channel configured (discord.relay_channel_ids, discord.outbound_channel_id, "
+                            "or system_messages.channel_id). Discord messages will not be relayed to Minecraft.");
+        }
+    }
+    if (config.relay.max_message_length < 50) {
+        warning_logger_("relay.max_message_length=" + std::to_string(config.relay.max_message_length) +
+                        " is very low and will truncate most messages. Consider raising it to at least 50.");
+    }
+
     impl_->config = config;
     impl_->callbacks = std::move(callbacks);
     impl_->resolved_guild_id = 0;
