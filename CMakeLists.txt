@@ -34,9 +34,21 @@ set(DPP_NO_CORO ON CACHE BOOL "" FORCE)
 set(DPP_USE_EXTERNAL_JSON ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ZLIB_USE_STATIC_LIBS OFF CACHE BOOL "" FORCE)
-set(ZLIB_LIBRARY "/usr/lib/x86_64-linux-gnu/libz.so" CACHE FILEPATH "" FORCE)
-set(ZLIB_LIBRARY_RELEASE "/usr/lib/x86_64-linux-gnu/libz.so" CACHE FILEPATH "" FORCE)
-set(ZLIB_LIBRARIES "/usr/lib/x86_64-linux-gnu/libz.so" CACHE STRING "" FORCE)
+# Locate zlib portably: prefer the user-supplied ZLIB_LIBRARY, then
+# search the multiarch and standard system paths.
+if(NOT ZLIB_LIBRARY)
+    find_library(ZLIB_LIBRARY z
+        HINTS
+            "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}"
+            /usr/lib64
+            /usr/lib
+    )
+endif()
+if(ZLIB_LIBRARY)
+    set(ZLIB_LIBRARY         "${ZLIB_LIBRARY}" CACHE FILEPATH "" FORCE)
+    set(ZLIB_LIBRARY_RELEASE "${ZLIB_LIBRARY}" CACHE FILEPATH "" FORCE)
+    set(ZLIB_LIBRARIES       "${ZLIB_LIBRARY}" CACHE STRING  "" FORCE)
+endif()
 FetchContent_Declare(
     dpp
     GIT_REPOSITORY https://github.com/brainboxdotcc/DPP.git
