@@ -568,6 +568,8 @@ void EndcordPlugin::loadConfig()
     }
     catch (const std::exception &e) {
         getLogger().error("Failed to parse config '{}': {}", config_path.string(), e.what());
+        getLogger().error("Bridge disabled until config is fixed and /endcord reload is run.");
+        config_.enabled = false;
         return;
     }
 
