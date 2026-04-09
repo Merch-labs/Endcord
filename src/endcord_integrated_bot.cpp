@@ -19,6 +19,12 @@
 namespace endcord {
 namespace {
 
+// Discord API hard limit for message content (characters).
+static constexpr std::size_t kDiscordMaxMessageLength = 2000;
+// Safe limit for slash-command replies — leaves headroom for Discord's own
+// formatting overhead so the response is never silently truncated by the API.
+static constexpr std::size_t kDiscordSafeReplyLength = 1800;
+
 using json = nlohmann::json;
 using ReplacementList = bridge_support::ReplacementList;
 
@@ -1033,7 +1039,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
                     lines.push_back("Nobody is online right now.");
                 }
 
-                reply(truncateText(joinLines(lines), 1800), ephemeral);
+                reply(truncateText(joinLines(lines), kDiscordSafeReplyLength), ephemeral);
                 return;
             }
 
@@ -1087,7 +1093,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
                     }
                 }
 
-                reply(truncateText(joinLines(lines), 1800), ephemeral);
+                reply(truncateText(joinLines(lines), kDiscordSafeReplyLength), ephemeral);
                 return;
             }
 

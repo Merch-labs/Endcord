@@ -37,6 +37,9 @@ using json = nlohmann::json;
 namespace {
 using ReplacementList = bridge_support::ReplacementList;
 
+// Discord API hard limit for message content (characters).
+static constexpr std::size_t kDiscordMaxMessageLength = 2000;
+
 struct ServerTemplateStats {
     std::string server_name;
     std::string server_version;
@@ -892,7 +895,7 @@ void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string 
         }
         else {
             pending_system_messages_.push_back(
-                {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, 2000)});
+                {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, kDiscordMaxMessageLength)});
         }
     }
     if (dropped) {
