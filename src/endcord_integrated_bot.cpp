@@ -667,44 +667,54 @@ struct IntegratedBot::Impl {
         stop_threads = false;
 
         if (config.presence.enabled && !presence_thread.joinable()) {
-            presence_thread = std::thread([this] {
-                while (!stop_threads) {
-                    try {
-                        refreshPresence();
-                    }
-                    catch (const std::exception &ex) {
-                        owner->warning_logger_("Failed to refresh integrated bot presence: " + std::string(ex.what()));
-                    }
+            try {
+                presence_thread = std::thread([this] {
+                    while (!stop_threads) {
+                        try {
+                            refreshPresence();
+                        }
+                        catch (const std::exception &ex) {
+                            owner->warning_logger_("Failed to refresh integrated bot presence: " + std::string(ex.what()));
+                        }
 
-                    if (config.presence.update_interval_seconds <= 0) {
-                        break;
+                        if (config.presence.update_interval_seconds <= 0) {
+                            break;
+                        }
+                        for (int i = 0; i < config.presence.update_interval_seconds && !stop_threads; ++i) {
+                            std::this_thread::sleep_for(std::chrono::seconds(1));
+                        }
                     }
-                    for (int i = 0; i < config.presence.update_interval_seconds && !stop_threads; ++i) {
-                        std::this_thread::sleep_for(std::chrono::seconds(1));
-                    }
-                }
-            });
+                });
+            }
+            catch (const std::system_error &ex) {
+                owner->warning_logger_("Failed to start presence update thread: " + std::string(ex.what()));
+            }
         }
 
         if (config.system_messages.enabled && !system_thread.joinable()) {
-            system_thread = std::thread([this] {
-                auto delay = std::max(config.system_messages.poll_interval_seconds, 1);
-                while (!stop_threads) {
-                    try {
-                        drainAndSendSystemMessages();
-                        delay = std::max(config.system_messages.poll_interval_seconds, 1);
-                    }
-                    catch (const std::exception &ex) {
-                        owner->warning_logger_("Failed to relay integrated system messages: " + std::string(ex.what()));
-                        delay = std::min(std::max(delay * 2, config.system_messages.failure_backoff_seconds),
-                                         config.system_messages.max_backoff_seconds);
-                    }
+            try {
+                system_thread = std::thread([this] {
+                    auto delay = std::max(config.system_messages.poll_interval_seconds, 1);
+                    while (!stop_threads) {
+                        try {
+                            drainAndSendSystemMessages();
+                            delay = std::max(config.system_messages.poll_interval_seconds, 1);
+                        }
+                        catch (const std::exception &ex) {
+                            owner->warning_logger_("Failed to relay integrated system messages: " + std::string(ex.what()));
+                            delay = std::min(std::max(delay * 2, config.system_messages.failure_backoff_seconds),
+                                             config.system_messages.max_backoff_seconds);
+                        }
 
-                    for (int i = 0; i < delay && !stop_threads; ++i) {
-                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                        for (int i = 0; i < delay && !stop_threads; ++i) {
+                            std::this_thread::sleep_for(std::chrono::seconds(1));
+                        }
                     }
-                }
-            });
+                });
+            }
+            catch (const std::system_error &ex) {
+                owner->warning_logger_("Failed to start system message thread: " + std::string(ex.what()));
+            }
         }
     }
 
