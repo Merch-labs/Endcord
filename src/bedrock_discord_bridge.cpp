@@ -880,14 +880,21 @@ void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string 
         return;
     }
 
-    std::lock_guard lock(system_message_mutex_);
-    if (static_cast<int>(pending_system_messages_.size()) >= config_.bot_bridge.outbound_system_message_queue_max_size) {
+    bool dropped = false;
+    {
+        std::lock_guard lock(system_message_mutex_);
+        if (static_cast<int>(pending_system_messages_.size()) >= config_.bot_bridge.outbound_system_message_queue_max_size) {
+            dropped = true;
+        }
+        else {
+            pending_system_messages_.push_back(
+                {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, 2000)});
+        }
+    }
+    if (dropped) {
         getLogger().warning("Dropping bot-owned system message for '{}' because the queue is full ({} items).",
                             player_name, config_.bot_bridge.outbound_system_message_queue_max_size);
-        return;
     }
-    pending_system_messages_.push_back(
-        {std::move(event_name), std::move(player_name), truncateUtf8Bytes(content, 2000)});
 }
 
 void EndcordPlugin::sendStatus(endstone::CommandSender &sender) const
