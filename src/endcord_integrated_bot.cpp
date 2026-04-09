@@ -869,8 +869,8 @@ struct IntegratedBot::Impl {
     std::thread system_thread;
     std::uint64_t resolved_guild_id = 0;
     std::uint64_t resolved_outbound_channel_id = 0;
-    bool commands_synced = false;
-    bool running = false;
+    std::atomic<bool> commands_synced{false};
+    std::atomic<bool> running{false};
 };
 
 IntegratedBot::IntegratedBot(LogCallback info_logger, LogCallback warning_logger)
