@@ -174,6 +174,11 @@ private:
     std::filesystem::path getConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
 
+    // Shared token used to detect plugin teardown inside deferred scheduler
+    // tasks.  stopIntegratedBot() invalidates the current token and issues a
+    // fresh one so the next start cycle gets a clean slate.
+    std::shared_ptr<std::atomic<bool>> plugin_alive_{std::make_shared<std::atomic<bool>>(true)};
+
     BridgeConfig config_;
     std::optional<WebhookTarget> webhook_target_;
     bool runtime_webhook_override_active_ = false;

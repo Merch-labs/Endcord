@@ -733,6 +733,12 @@ void EndcordPlugin::stopIntegratedBot()
         return;
     }
 
+    // Invalidate the current token before stopping.  Any scheduler tasks that
+    // were queued but haven't run yet will see alive==false and skip the
+    // this-dereference.  A fresh token is issued for the next start cycle.
+    plugin_alive_->store(false);
+    plugin_alive_ = std::make_shared<std::atomic<bool>>(true);
+
     integrated_bot_->stop();
     integrated_bot_.reset();
 }
@@ -1092,9 +1098,17 @@ nlohmann::json EndcordPlugin::relayDiscordChat(const std::string &author, const 
         getLogger().info("Relaying Discord message from '{}' in '#{}' into Minecraft.", author, channel);
     }
 
-    getServer().getScheduler().runTask(*this, [this, promise, formatted] {
+    getServer().getScheduler().runTask(*this, [this, promise, formatted, alive = plugin_alive_] {
+        if (!alive->load()) {
+            return;  // Plugin is being torn down; don't touch *this
+        }
         getServer().broadcastMessage(formatted);
-        promise->set_value();
+        try {
+            promise->set_value();
+        }
+        catch (const std::future_error &) {
+            // Caller already timed out and discarded the future; no-op
+        }
     });
 
     if (future.wait_for(std::chrono::milliseconds(config_.bot_bridge.request_timeout_ms)) != std::future_status::ready) {
@@ -1128,7 +1142,10 @@ nlohmann::json EndcordPlugin::executeDiscordCommand(const std::string &actor, co
     auto promise = std::make_shared<std::promise<CommandResult>>();
     auto future = promise->get_future();
 
-    getServer().getScheduler().runTask(*this, [this, promise, actor, safe_command_line] {
+    getServer().getScheduler().runTask(*this, [this, promise, actor, safe_command_line, alive = plugin_alive_] {
+        if (!alive->load()) {
+            return;  // Plugin is being torn down; don't touch *this
+        }
         CommandResult result;
         auto &console = getServer().getCommandSender();
         endstone::CommandSenderWrapper wrapper(
@@ -1141,7 +1158,12 @@ nlohmann::json EndcordPlugin::executeDiscordCommand(const std::string &actor, co
         }
         result.dispatched = getServer().dispatchCommand(wrapper, safe_command_line);
         result.ok = result.dispatched;
-        promise->set_value(std::move(result));
+        try {
+            promise->set_value(std::move(result));
+        }
+        catch (const std::future_error &) {
+            // Caller already timed out and discarded the future; no-op
+        }
     });
 
     if (future.wait_for(std::chrono::milliseconds(config_.bot_bridge.request_timeout_ms)) != std::future_status::ready) {
