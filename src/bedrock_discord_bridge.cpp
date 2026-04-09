@@ -8,8 +8,6 @@
 #include <endstone/command/command_sender_wrapper.h>
 
 #include <algorithm>
-#include <cerrno>
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -18,16 +16,10 @@
 #include <iomanip>
 #include <memory>
 #include <optional>
-#include <fcntl.h>
 #include <regex>
 #include <sstream>
-#include <signal.h>
 #include <system_error>
-#include <sys/prctl.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 #include <variant>
 
