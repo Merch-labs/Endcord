@@ -174,8 +174,6 @@ private:
     std::filesystem::path getConfigPath() const;
     std::filesystem::path getWebhookStatePath() const;
 
-    static std::string escapeJson(const std::string &value);
-
     BridgeConfig config_;
     std::optional<WebhookTarget> webhook_target_;
     bool runtime_webhook_override_active_ = false;

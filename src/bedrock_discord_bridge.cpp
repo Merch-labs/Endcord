@@ -847,18 +847,6 @@ void EndcordPlugin::enqueueDiscordMessage(const std::string &source_name, std::s
         content = content.substr(0, limit) + "...";
     }
 
-    std::ostringstream payload;
-    payload << "{"
-            << "\"username\":\"" << escapeJson(username) << "\","
-            << "\"content\":\"" << escapeJson(content) << "\"";
-    if (avatar_url.has_value()) {
-        payload << ",\"avatar_url\":\"" << escapeJson(*avatar_url) << "\"";
-    }
-    if (!config_.discord.allow_mentions) {
-        payload << ",\"allowed_mentions\":{\"parse\":[]}";
-    }
-    payload << "}";
-
     if (!webhook_target_) {
         if (config_.logging.log_filtered_events) {
             getLogger().debug("Skipping Discord webhook POST for '{}' because the Discord webhook URL is not configured.",
@@ -867,7 +855,15 @@ void EndcordPlugin::enqueueDiscordMessage(const std::string &source_name, std::s
         return;
     }
 
-    enqueueWebhookPayload({source_name, payload.str(), 0});
+    json payload = {{"username", username}, {"content", content}};
+    if (avatar_url.has_value()) {
+        payload["avatar_url"] = *avatar_url;
+    }
+    if (!config_.discord.allow_mentions) {
+        payload["allowed_mentions"] = {{"parse", json::array()}};
+    }
+
+    enqueueWebhookPayload({source_name, payload.dump(), 0});
 }
 
 void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string player_name, std::string content)
@@ -1395,33 +1391,3 @@ std::string EndcordPlugin::truncateUtf8Bytes(const std::string &value, std::size
     return value.substr(0, end);
 }
 
-std::string EndcordPlugin::escapeJson(const std::string &value)
-{
-    std::string escaped;
-    escaped.reserve(value.size());
-
-    for (const char ch : value) {
-        switch (ch) {
-        case '\\':
-            escaped += "\\\\";
-            break;
-        case '"':
-            escaped += "\\\"";
-            break;
-        case '\n':
-            escaped += "\\n";
-            break;
-        case '\r':
-            escaped += "\\r";
-            break;
-        case '\t':
-            escaped += "\\t";
-            break;
-        default:
-            escaped += ch;
-            break;
-        }
-    }
-
-    return escaped;
-}
