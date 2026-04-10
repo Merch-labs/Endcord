@@ -54,8 +54,11 @@ private:
         std::string death_content_template = ":skull: {event_message}";
         bool allow_mentions = false;
         bool use_player_avatar_for_system_messages = true;
+        bool strip_minecraft_formatting = true;
         int max_username_length = 80;
         int max_content_length = 2000;
+        std::string server_start_content_template = ":white_check_mark: Server is now **online**.";
+        std::string server_stop_content_template  = ":octagonal_sign: Server is going **offline**.";
     };
 
     struct RelayOptions {
@@ -64,6 +67,8 @@ private:
         bool join_enabled = true;
         bool quit_enabled = true;
         bool death_enabled = true;
+        bool server_start_enabled = true;
+        bool server_stop_enabled = true;
     };
 
     struct QueueOptions {
@@ -146,6 +151,8 @@ private:
     void forwardChatToDiscord(const endstone::Player &player, const std::string &message);
     void forwardLifecycleEventToDiscord(const endstone::Player &player, const std::string &event_name,
                                         const std::string &content_template, const std::string &event_message);
+    void forwardServerStartToDiscord();
+    void sendServerStopWebhook();
     void enqueueDiscordMessage(const std::string &source_name, std::string username, std::string content,
                                const std::optional<std::string> &avatar_url);
     void enqueueBotSystemMessage(std::string event_name, std::string player_name, std::string content);

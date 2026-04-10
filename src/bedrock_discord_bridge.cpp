@@ -138,6 +138,21 @@ ReplacementList makeInboundChatTemplateReplacements(const std::string &author, c
             {"{game_port_v6}", std::to_string(stats.game_port_v6)},
             {"{online_mode}", stats.online_mode ? "true" : "false"}};
 }
+ReplacementList makeServerTemplateReplacements(const ServerTemplateStats &stats)
+{
+    return {{"{server}", stats.server_name},
+            {"{server_name}", stats.server_name},
+            {"{server_version}", stats.server_version},
+            {"{minecraft_version}", stats.minecraft_version},
+            {"{protocol_version}", std::to_string(stats.protocol_version)},
+            {"{online_players}", std::to_string(stats.online_players)},
+            {"{max_players}", std::to_string(stats.max_players)},
+            {"{player_slots_available}", std::to_string(stats.player_slots_available)},
+            {"{player_utilization_percent}", stats.player_utilization_percent},
+            {"{game_port}", std::to_string(stats.game_port)},
+            {"{game_port_v6}", std::to_string(stats.game_port_v6)},
+            {"{online_mode}", stats.online_mode ? "true" : "false"}};
+}
 }  // namespace
 
 ENDSTONE_PLUGIN(/*name=*/"endcord",
@@ -188,6 +203,7 @@ void EndcordPlugin::onEnable()
     registerEvent(&EndcordPlugin::onPlayerQuit, *this);
     registerEvent(&EndcordPlugin::onPlayerDeath, *this);
     restartRuntime();
+    forwardServerStartToDiscord();
 
     getLogger().info("Plugin enabled. Chat forwarding pipeline is active.");
 }
@@ -196,6 +212,7 @@ void EndcordPlugin::onDisable()
 {
     stopIntegratedBot();
     stopWorker();
+    sendServerStopWebhook();
     getLogger().info("Plugin disabled.");
 }
 
@@ -317,14 +334,19 @@ void EndcordPlugin::writeDefaultConfigIfMissing() const
           {"death_content_template", ":skull: {event_message}"},
           {"allow_mentions", false},
           {"use_player_avatar_for_system_messages", true},
+          {"strip_minecraft_formatting", true},
           {"max_username_length", 80},
-          {"max_content_length", 2000}}},
+          {"max_content_length", 2000},
+          {"server_start_content_template", ":white_check_mark: Server is now **online**."},
+          {"server_stop_content_template",  ":octagonal_sign: Server is going **offline**."}}},
         {"relay",
          {{"minecraft_to_discord_enabled", true},
           {"chat_enabled", true},
           {"join_enabled", true},
           {"quit_enabled", true},
-          {"death_enabled", true}}},
+          {"death_enabled", true},
+          {"server_start_enabled", true},
+          {"server_stop_enabled", true}}},
         {"queue",
          {{"max_size", 256},
           {"max_attempts", 5},
@@ -392,8 +414,11 @@ void EndcordPlugin::loadConfig()
         config_.discord.death_content_template               = discord.value("death_content_template",               config_.discord.death_content_template);
         config_.discord.allow_mentions                       = discord.value("allow_mentions",                       config_.discord.allow_mentions);
         config_.discord.use_player_avatar_for_system_messages = discord.value("use_player_avatar_for_system_messages", config_.discord.use_player_avatar_for_system_messages);
+        config_.discord.strip_minecraft_formatting           = discord.value("strip_minecraft_formatting",           config_.discord.strip_minecraft_formatting);
         config_.discord.max_username_length                  = discord.value("max_username_length",                  config_.discord.max_username_length);
         config_.discord.max_content_length                   = discord.value("max_content_length",                   config_.discord.max_content_length);
+        config_.discord.server_start_content_template        = discord.value("server_start_content_template",        config_.discord.server_start_content_template);
+        config_.discord.server_stop_content_template         = discord.value("server_stop_content_template",         config_.discord.server_stop_content_template);
 
         const auto &relay = root.contains("relay") && root["relay"].is_object() ? root["relay"] : json::object();
         config_.relay.minecraft_to_discord_enabled = relay.value("minecraft_to_discord_enabled", config_.relay.minecraft_to_discord_enabled);
@@ -401,6 +426,8 @@ void EndcordPlugin::loadConfig()
         config_.relay.join_enabled                 = relay.value("join_enabled",                 config_.relay.join_enabled);
         config_.relay.quit_enabled                 = relay.value("quit_enabled",                 config_.relay.quit_enabled);
         config_.relay.death_enabled                = relay.value("death_enabled",                config_.relay.death_enabled);
+        config_.relay.server_start_enabled         = relay.value("server_start_enabled",         config_.relay.server_start_enabled);
+        config_.relay.server_stop_enabled          = relay.value("server_stop_enabled",          config_.relay.server_stop_enabled);
 
         const auto &queue = root.contains("queue") && root["queue"].is_object() ? root["queue"] : json::object();
         config_.queue.max_size          = queue.value("max_size",          config_.queue.max_size);
@@ -677,7 +704,10 @@ void EndcordPlugin::forwardChatToDiscord(const endstone::Player &player, const s
 
     const auto avatar_url = getOrCreateAvatarUrl(player);
     const auto server_stats = collectServerTemplateStats(getServer());
-    const auto replacements = makePlayerTemplateReplacements(player, message, "chat", server_stats);
+    const auto safe_message = config_.discord.strip_minecraft_formatting
+                                  ? bridge_support::stripMinecraftFormatting(message)
+                                  : message;
+    const auto replacements = makePlayerTemplateReplacements(player, safe_message, "chat", server_stats);
     auto username = bridge_support::applyTemplate(config_.discord.username_template, replacements);
     auto content = bridge_support::applyTemplate(config_.discord.content_template, replacements);
 
@@ -697,7 +727,10 @@ void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &playe
     }
 
     const auto server_stats = collectServerTemplateStats(getServer());
-    const auto replacements = makePlayerTemplateReplacements(player, event_message, event_name, server_stats);
+    const auto safe_event_message = config_.discord.strip_minecraft_formatting
+                                        ? bridge_support::stripMinecraftFormatting(event_message)
+                                        : event_message;
+    const auto replacements = makePlayerTemplateReplacements(player, safe_event_message, event_name, server_stats);
     auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
     auto content = bridge_support::applyTemplate(content_template, replacements);
 
@@ -712,6 +745,66 @@ void EndcordPlugin::forwardLifecycleEventToDiscord(const endstone::Player &playe
     }
 
     enqueueDiscordMessage(player.getName(), std::move(username), std::move(content), avatar_url);
+}
+
+void EndcordPlugin::forwardServerStartToDiscord()
+{
+    if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled || !config_.relay.server_start_enabled) {
+        return;
+    }
+
+    const auto server_stats = collectServerTemplateStats(getServer());
+    const auto replacements = makeServerTemplateReplacements(server_stats);
+    auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
+    auto content  = bridge_support::applyTemplate(config_.discord.server_start_content_template, replacements);
+
+    if (config_.bot_bridge.outbound_system_messages_enabled) {
+        enqueueBotSystemMessage("server_start", "", content);
+        return;
+    }
+
+    enqueueDiscordMessage("server", std::move(username), std::move(content), std::nullopt);
+}
+
+void EndcordPlugin::sendServerStopWebhook()
+{
+    // Called after stopWorker() has joined the worker thread, so the shared
+    // webhook_client_ is gone.  We create a short-lived client for this one
+    // best-effort send; failure is logged but not fatal.
+    if (!config_.enabled || !config_.relay.minecraft_to_discord_enabled || !config_.relay.server_stop_enabled) {
+        return;
+    }
+    if (!webhook_target_) {
+        return;
+    }
+
+    const auto server_stats = collectServerTemplateStats(getServer());
+    const auto replacements = makeServerTemplateReplacements(server_stats);
+    auto username = bridge_support::applyTemplate(config_.discord.system_username_template, replacements);
+    auto content  = bridge_support::applyTemplate(config_.discord.server_stop_content_template, replacements);
+    if (content.empty()) {
+        return;
+    }
+    username = bridge_support::truncateUtf8Bytes(username, static_cast<std::size_t>(config_.discord.max_username_length));
+    content  = bridge_support::truncateUtf8Bytes(content,  static_cast<std::size_t>(config_.discord.max_content_length));
+
+    json payload = {{"username", username}, {"content", content}};
+    if (!config_.discord.allow_mentions) {
+        payload["allowed_mentions"] = {{"parse", json::array()}};
+    }
+
+    httplib::Client client(webhook_target_->origin);
+    client.set_connection_timeout(std::chrono::milliseconds(config_.queue.connect_timeout_ms));
+    client.set_read_timeout(std::chrono::milliseconds(config_.queue.read_timeout_ms));
+    client.set_write_timeout(std::chrono::milliseconds(config_.queue.write_timeout_ms));
+    client.set_follow_location(true);
+    client.set_default_headers({{"User-Agent", "endcord/0.7.0"}});
+
+    const auto result = client.Post(webhook_target_->path.c_str(), payload.dump(), "application/json");
+    if (!result) {
+        getLogger().warning("Failed to send server stop notification to Discord: {}",
+                            httplib::to_string(result.error()));
+    }
 }
 
 void EndcordPlugin::enqueueDiscordMessage(const std::string &source_name, std::string username, std::string content,
@@ -855,6 +948,10 @@ void EndcordPlugin::processWebhookJob(WebhookJob job)
             }
             queue_cv_.notify_one();
         }
+        else {
+            getLogger().warning("Giving up on Discord webhook payload for '{}' after {} attempt(s): {}",
+                                job.player_name, job.attempt + 1, httplib::to_string(result.error()));
+        }
         return;
     }
 
@@ -893,6 +990,10 @@ void EndcordPlugin::processWebhookJob(WebhookJob job)
                 webhook_queue_.push_front(std::move(job));
             }
             queue_cv_.notify_one();
+        }
+        else {
+            getLogger().warning("Giving up on Discord webhook payload for '{}' after {} attempt(s): HTTP {}",
+                                job.player_name, job.attempt + 1, result->status);
         }
         return;
     }

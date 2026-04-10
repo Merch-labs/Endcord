@@ -46,6 +46,29 @@ std::string truncateUtf8Bytes(const std::string &value, std::size_t max_bytes)
     return value.substr(0, end);
 }
 
+std::string stripMinecraftFormatting(std::string value)
+{
+    // § is U+00A7, encoded in UTF-8 as the two bytes 0xC2 0xA7.
+    // A Minecraft format code is § immediately followed by one character
+    // (always ASCII in practice: 0-9, a-f, k-o, r).
+    std::string result;
+    result.reserve(value.size());
+    for (std::size_t i = 0; i < value.size(); ) {
+        if (static_cast<unsigned char>(value[i]) == 0xC2U
+            && i + 1 < value.size()
+            && static_cast<unsigned char>(value[i + 1]) == 0xA7U) {
+            i += 2;  // skip §
+            if (i < value.size()) {
+                i += 1;  // skip the format code character
+            }
+        }
+        else {
+            result += value[i++];
+        }
+    }
+    return result;
+}
+
 bool isAllowedRemoteAddress(const std::string &host, const std::vector<std::string> &allowed_patterns)
 {
     if (allowed_patterns.empty()) {

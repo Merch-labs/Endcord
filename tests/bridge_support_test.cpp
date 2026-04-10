@@ -77,6 +77,25 @@ int main()
     // Mixed: ASCII before multibyte, cut just before multibyte
     expect(bridge_support::truncateUtf8Bytes("ab\xE4\xB8\xAD", 2) == "ab", "truncate: cut before multibyte");
 
+    // --- stripMinecraftFormatting ---
+
+    // No codes: unchanged
+    expect(bridge_support::stripMinecraftFormatting("hello") == "hello", "strip: no codes");
+    // Single color code stripped (§a = 0xC2 0xA7 'a')
+    expect(bridge_support::stripMinecraftFormatting("\xC2\xA7" "ahello") == "hello", "strip: leading code");
+    // Code in the middle
+    expect(bridge_support::stripMinecraftFormatting("hel\xC2\xA7" "alo") == "hello", "strip: mid code");
+    // Multiple codes
+    expect(bridge_support::stripMinecraftFormatting("\xC2\xA7" "aRed\xC2\xA7" "r text") == "Red text", "strip: multiple codes");
+    // Reset code §r
+    expect(bridge_support::stripMinecraftFormatting("\xC2\xA7" "rword") == "word", "strip: reset code");
+    // Trailing § with no following char (graceful: § itself dropped)
+    expect(bridge_support::stripMinecraftFormatting("hi\xC2\xA7") == "hi", "strip: trailing section sign");
+    // 0xC2 not followed by 0xA7: left as-is
+    expect(bridge_support::stripMinecraftFormatting("\xC2\xA8" "x") == "\xC2\xA8" "x", "strip: non-section 0xC2 byte unchanged");
+    // Empty input
+    expect(bridge_support::stripMinecraftFormatting("") == "", "strip: empty");
+
     // --- replaceAll ---
 
     expect(bridge_support::replaceAll("hello world", "world", "there") == "hello there",
