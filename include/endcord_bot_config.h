@@ -50,14 +50,6 @@ struct RelayRuntimeConfig {
     int max_message_length = 1800;
 };
 
-struct IntegrationRuntimeConfig {
-    int request_timeout_seconds = 10;
-    bool configure_webhook_on_startup = true;
-    int request_max_retries = 3;
-    double request_retry_base_seconds = 1.5;
-    double request_retry_max_seconds = 15.0;
-};
-
 struct PresenceRuntimeConfig {
     bool enabled = true;
     std::string status = "online";
@@ -87,7 +79,6 @@ struct SystemMessageRuntimeConfig {
 
 struct BotConfig {
     DiscordRuntimeConfig discord{};
-    IntegrationRuntimeConfig integration{};
     RelayRuntimeConfig relay{};
     SlashCommandConfig slash_commands{};
     PresenceRuntimeConfig presence{};
@@ -96,7 +87,6 @@ struct BotConfig {
 };
 
 nlohmann::json buildDefaultBotConfigJson();
-void writeDefaultBotConfigIfMissing(const std::filesystem::path &path);
 BotConfig loadBotConfig(const nlohmann::json &root);
 BotConfig loadBotConfig(const std::filesystem::path &path);
 

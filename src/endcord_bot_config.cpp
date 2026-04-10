@@ -36,33 +36,13 @@ SlashCommandRuleConfig loadCommandRule(const json &slash_cfg, const std::string 
 {
     const auto &node = slash_cfg.contains(name) && slash_cfg[name].is_object() ? slash_cfg[name] : json::object();
     SlashCommandRuleConfig rule;
-    if (node.is_object()) {
-        rule.enabled = node.value("enabled", true);
-        rule.admin_only = node.value("admin_only", default_admin_only);
-        rule.role_ids = node.contains("role_ids") ? loadSnowflakeList(node["role_ids"]) : fallback_role_ids;
-    }
-    else {
-        rule.enabled = true;
-        rule.admin_only = default_admin_only;
-        rule.role_ids = fallback_role_ids;
-    }
+    rule.enabled = node.value("enabled", true);
+    rule.admin_only = node.value("admin_only", default_admin_only);
+    rule.role_ids = node.contains("role_ids") ? loadSnowflakeList(node["role_ids"]) : fallback_role_ids;
     return rule;
 }
 
 }  // namespace
-
-void writeDefaultBotConfigIfMissing(const std::filesystem::path &path)
-{
-    if (std::filesystem::exists(path)) {
-        return;
-    }
-
-    std::filesystem::create_directories(path.parent_path());
-    const auto root = buildDefaultBotConfigJson();
-
-    std::ofstream output(path);
-    output << root.dump(2) << '\n';
-}
 
 nlohmann::json buildDefaultBotConfigJson()
 {
@@ -78,12 +58,6 @@ nlohmann::json buildDefaultBotConfigJson()
           {"sync_commands_globally", false},
           {"auto_create_webhook", true},
           {"webhook_name", "Endcord"}}},
-        {"integration",
-         {{"request_timeout_seconds", 10},
-          {"configure_webhook_on_startup", true},
-          {"request_max_retries", 3},
-          {"request_retry_base_seconds", 1.5},
-          {"request_retry_max_seconds", 15.0}}},
         {"relay",
          {{"include_attachment_urls", true},
           {"include_jump_url", false},
@@ -130,10 +104,6 @@ BotConfig loadBotConfig(const nlohmann::json &root)
 {
     const auto &discord_cfg = root.contains("discord") && root["discord"].is_object() ? root["discord"] : json::object();
     const auto &relay_cfg = root.contains("relay") && root["relay"].is_object() ? root["relay"] : json::object();
-    const auto &integration_cfg =
-        root.contains("integration") && root["integration"].is_object()
-            ? root["integration"]
-            : (root.contains("plugin_bridge") && root["plugin_bridge"].is_object() ? root["plugin_bridge"] : json::object());
     const auto &slash_cfg =
         root.contains("slash_commands") && root["slash_commands"].is_object() ? root["slash_commands"] : json::object();
     const auto &presence_cfg =
@@ -157,14 +127,6 @@ BotConfig loadBotConfig(const nlohmann::json &root)
     config.discord.sync_commands_globally = discord_cfg.value("sync_commands_globally", false);
     config.discord.auto_create_webhook = discord_cfg.value("auto_create_webhook", true);
     config.discord.webhook_name = discord_cfg.value("webhook_name", std::string("Endcord"));
-
-    config.integration.request_timeout_seconds = std::max(integration_cfg.value("request_timeout_seconds", 10), 1);
-    config.integration.configure_webhook_on_startup = integration_cfg.value("configure_webhook_on_startup", true);
-    config.integration.request_max_retries = std::max(integration_cfg.value("request_max_retries", 3), 0);
-    config.integration.request_retry_base_seconds =
-        std::max(integration_cfg.value("request_retry_base_seconds", 1.5), 0.1);
-    config.integration.request_retry_max_seconds =
-        std::max(integration_cfg.value("request_retry_max_seconds", 15.0), 0.1);
 
     config.relay.include_attachment_urls = relay_cfg.value("include_attachment_urls", true);
     config.relay.include_jump_url = relay_cfg.value("include_jump_url", false);
