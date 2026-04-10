@@ -54,6 +54,51 @@ int main()
                              "https://avatars.example/2535441133062698/12345678123456781234567812345678/64"),
            "custom provider template");
 
+    // --- truncateUtf8Bytes ---
+
+    // ASCII: shorter than limit → unchanged
+    expect(bridge_support::truncateUtf8Bytes("hello", 10) == "hello", "truncate: ascii passthrough");
+    // ASCII: exact boundary
+    expect(bridge_support::truncateUtf8Bytes("hello", 5) == "hello", "truncate: ascii exact boundary");
+    // ASCII: truncation
+    expect(bridge_support::truncateUtf8Bytes("hello", 3) == "hel", "truncate: ascii truncation");
+    // max_bytes == 0
+    expect(bridge_support::truncateUtf8Bytes("hello", 0) == "", "truncate: zero limit");
+    // 2-byte sequence (U+00E9 é = 0xC3 0xA9): limit falls in middle of sequence
+    expect(bridge_support::truncateUtf8Bytes("\xC3\xA9z", 1) == "", "truncate: 2-byte seq not split");
+    // 3-byte sequence (U+4E2D 中 = 0xE4 0xB8 0xAD): limit falls after full sequence
+    expect(bridge_support::truncateUtf8Bytes("\xE4\xB8\xADx", 3) == "\xE4\xB8\xAD", "truncate: 3-byte seq full");
+    // 3-byte sequence: limit falls in middle
+    expect(bridge_support::truncateUtf8Bytes("\xE4\xB8\xADx", 2) == "", "truncate: 3-byte seq not split");
+    // 4-byte sequence (U+1F600 😀 = 0xF0 0x9F 0x98 0x80): limit falls in middle
+    expect(bridge_support::truncateUtf8Bytes("\xF0\x9F\x98\x80z", 2) == "", "truncate: 4-byte seq not split");
+    // 4-byte sequence: limit falls after full sequence
+    expect(bridge_support::truncateUtf8Bytes("\xF0\x9F\x98\x80z", 5) == "\xF0\x9F\x98\x80z", "truncate: 4-byte seq full");
+    // Mixed: ASCII before multibyte, cut just before multibyte
+    expect(bridge_support::truncateUtf8Bytes("ab\xE4\xB8\xAD", 2) == "ab", "truncate: cut before multibyte");
+
+    // --- replaceAll ---
+
+    expect(bridge_support::replaceAll("hello world", "world", "there") == "hello there",
+           "replaceAll: basic replacement");
+    expect(bridge_support::replaceAll("aaa", "a", "bb") == "bbbbbb", "replaceAll: repeated replacement");
+    expect(bridge_support::replaceAll("hello", "x", "y") == "hello", "replaceAll: no match");
+    expect(bridge_support::replaceAll("hello", "", "y") == "hello", "replaceAll: empty needle unchanged");
+    expect(bridge_support::replaceAll("", "x", "y") == "", "replaceAll: empty input");
+    expect(bridge_support::replaceAll("abcabc", "abc", "") == "", "replaceAll: replace with empty");
+
+    // --- applyTemplate ---
+
+    expect(bridge_support::applyTemplate("{player} joined", {{"{player}", "Alice"}}) == "Alice joined",
+           "applyTemplate: single replacement");
+    expect(bridge_support::applyTemplate("{a} and {b}", {{"{a}", "X"}, {"{b}", "Y"}}) == "X and Y",
+           "applyTemplate: multiple replacements");
+    expect(bridge_support::applyTemplate("{unknown} left", {{"{player}", "Alice"}}) == "{unknown} left",
+           "applyTemplate: missing placeholder unchanged");
+    expect(bridge_support::applyTemplate("", {{"{player}", "Alice"}}) == "", "applyTemplate: empty template");
+    expect(bridge_support::applyTemplate("no placeholders", {}) == "no placeholders",
+           "applyTemplate: no replacements");
+
     std::cout << "bridge_support tests passed\n";
     return 0;
 }
