@@ -136,6 +136,16 @@ ReplacementList buildRelayReplacements(const dpp::message &message, const std::s
     };
 }
 
+dpp::loglevel parseLogLevel(const std::string &value)
+{
+    if (value == "TRACE" || value == "trace") return dpp::ll_trace;
+    if (value == "DEBUG" || value == "debug") return dpp::ll_debug;
+    if (value == "INFO"  || value == "info")  return dpp::ll_info;
+    if (value == "ERROR" || value == "error") return dpp::ll_error;
+    if (value == "CRITICAL" || value == "critical") return dpp::ll_critical;
+    return dpp::ll_warning;
+}
+
 dpp::presence_status toPresenceStatus(const std::string &value)
 {
     if (value == "idle") {
@@ -944,7 +954,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
     impl_->cluster = std::make_unique<dpp::cluster>(config.discord.token, dpp::i_default_intents | dpp::i_message_content);
 
     impl_->cluster->on_log([this](const dpp::log_t &event) {
-        if (event.severity >= dpp::ll_warning) {
+        if (event.severity >= parseLogLevel(impl_->config.logging.level)) {
             warning_logger_("Discord runtime: " + event.message);
         }
     });
@@ -965,15 +975,27 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
             return;
         }
         if (config.relay.ignore_bot_messages && message.author.is_bot()) {
+            if (config.logging.log_ignored_messages) {
+                info_logger_("Ignored bot message from '" + message.author.username + "'.");
+            }
             return;
         }
         if (config.relay.ignore_webhook_messages && message.webhook_id != 0) {
+            if (config.logging.log_ignored_messages) {
+                info_logger_("Ignored webhook message in channel " + std::to_string(message.channel_id) + ".");
+            }
             return;
         }
         if (impl_->resolvedGuildId() != 0 && message.guild_id != impl_->resolvedGuildId()) {
+            if (config.logging.log_ignored_messages) {
+                info_logger_("Ignored message from untracked guild " + std::to_string(message.guild_id) + ".");
+            }
             return;
         }
         if (!impl_->isRelayChannel(static_cast<std::uint64_t>(message.channel_id))) {
+            if (config.logging.log_ignored_messages) {
+                info_logger_("Ignored message in non-relay channel " + std::to_string(message.channel_id) + ".");
+            }
             return;
         }
 

@@ -109,7 +109,10 @@ std::optional<std::uint32_t> parseIpv4Address(const std::string &value)
         }
     }
 
-    return (octets[0] << 24U) | (octets[1] << 16U) | (octets[2] << 8U) | octets[3];
+    return (static_cast<std::uint32_t>(octets[0]) << 24U) |
+           (static_cast<std::uint32_t>(octets[1]) << 16U) |
+           (static_cast<std::uint32_t>(octets[2]) <<  8U) |
+            static_cast<std::uint32_t>(octets[3]);
 }
 
 std::string normalizeAvatarProvider(std::string value)

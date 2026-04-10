@@ -61,7 +61,7 @@ struct PresenceRuntimeConfig {
 };
 
 struct LoggingRuntimeConfig {
-    std::string level = "INFO";
+    std::string level = "WARNING";
     bool log_ignored_messages = false;
     bool log_relay_successes = false;
     bool log_presence_updates = false;

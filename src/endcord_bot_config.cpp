@@ -85,7 +85,7 @@ nlohmann::json buildDefaultBotConfigJson()
           {"streaming_url", ""},
           {"update_interval_seconds", 120}}},
         {"logging",
-         {{"level", "INFO"},
+         {{"level", "WARNING"},
           {"log_ignored_messages", false},
           {"log_relay_successes", false},
           {"log_presence_updates", false}}},
@@ -156,7 +156,7 @@ BotConfig loadBotConfig(const nlohmann::json &root)
     config.presence.streaming_url = presence_cfg.value("streaming_url", std::string());
     config.presence.update_interval_seconds = std::max(presence_cfg.value("update_interval_seconds", 120), 0);
 
-    config.logging.level = logging_cfg.value("level", std::string("INFO"));
+    config.logging.level = logging_cfg.value("level", std::string("WARNING"));
     config.logging.log_ignored_messages = logging_cfg.value("log_ignored_messages", false);
     config.logging.log_relay_successes = logging_cfg.value("log_relay_successes", false);
     config.logging.log_presence_updates = logging_cfg.value("log_presence_updates", false);
