@@ -525,7 +525,7 @@ struct IntegratedBot::Impl {
                 return true;
             }
         }
-        catch (...) {
+        catch (const std::exception &) {
         }
 
         if (rule.admin_only) {
@@ -944,7 +944,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
     impl_->cluster = std::make_unique<dpp::cluster>(config.discord.token, dpp::i_default_intents | dpp::i_message_content);
 
     impl_->cluster->on_log([this](const dpp::log_t &event) {
-        if (event.severity <= dpp::ll_warning) {
+        if (event.severity >= dpp::ll_warning) {
             warning_logger_("Discord runtime: " + event.message);
         }
     });

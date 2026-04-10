@@ -545,7 +545,7 @@ void EndcordPlugin::startWorker()
     webhook_client_->set_write_timeout(std::chrono::milliseconds(config_.queue.write_timeout_ms));
     webhook_client_->set_follow_location(true);
     webhook_client_->set_keep_alive(true);
-    webhook_client_->set_default_headers({{"User-Agent", "endcord/0.6.0"}});
+    webhook_client_->set_default_headers({{"User-Agent", "endcord/0.7.0"}});
 
     stop_worker_ = false;
     next_request_at_ = std::chrono::steady_clock::now();
@@ -728,12 +728,10 @@ void EndcordPlugin::enqueueDiscordMessage(const std::string &source_name, std::s
         return;
     }
 
-    if (static_cast<int>(username.size()) > config_.discord.max_username_length) {
-        username.resize(static_cast<std::size_t>(config_.discord.max_username_length));
-    }
+    username = bridge_support::truncateUtf8Bytes(username, static_cast<std::size_t>(config_.discord.max_username_length));
     if (static_cast<int>(content.size()) > config_.discord.max_content_length) {
         const auto limit = static_cast<std::size_t>(std::max(config_.discord.max_content_length - 3, 0));
-        content = content.substr(0, limit) + "...";
+        content = bridge_support::truncateUtf8Bytes(content, limit) + "...";
     }
 
     if (!webhook_target_) {
