@@ -22,7 +22,7 @@ namespace {
 
 // Safe limit for slash-command replies — leaves headroom for Discord's own
 // formatting overhead so the response is never silently truncated by the API.
-static constexpr std::size_t kDiscordSafeReplyLength = 1800;
+constexpr std::size_t kDiscordSafeReplyLength = 1800;
 
 using json = nlohmann::json;
 using ReplacementList = bridge_support::ReplacementList;

@@ -50,7 +50,7 @@ nlohmann::json buildDefaultBotConfigJson()
         {"discord",
          {{"token", "replace-me"},
           {"guild_id", 0},
-          {"relay_channel_ids", json::array({0})},
+          {"relay_channel_ids", json::array()},
           {"outbound_channel_id", 0},
           {"command_role_ids", json::array()},
           {"status_role_ids", json::array()},

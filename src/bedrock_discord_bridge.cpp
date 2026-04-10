@@ -1160,7 +1160,7 @@ void EndcordPlugin::clearWebhookState() const
 {
     std::error_code ec;
     fs::remove(getWebhookStatePath(), ec);
-    if (ec && ec.value() != 2) {
+    if (ec && ec != std::errc::no_such_file_or_directory) {
         getLogger().warning("Could not clear runtime webhook state '{}': {}", getWebhookStatePath().string(),
                             ec.message());
     }
@@ -1213,7 +1213,7 @@ std::optional<std::int64_t> EndcordPlugin::parseRetryDelayMs(const std::string &
         const auto seconds = std::stod(value);
         return static_cast<std::int64_t>(std::ceil(seconds * 1000.0));
     }
-    catch (...) {
+    catch (const std::exception &) {
         return std::nullopt;
     }
 }
@@ -1252,7 +1252,6 @@ std::string EndcordPlugin::messageToPlainText(const endstone::Message &message) 
                 if (!translated.empty()) {
                     return translated;
                 }
-
                 std::string rendered = value.getText();
                 if (!value.getParameters().empty()) {
                     rendered += " [";
@@ -1269,5 +1268,3 @@ std::string EndcordPlugin::messageToPlainText(const endstone::Message &message) 
         },
         message);
 }
-
-
