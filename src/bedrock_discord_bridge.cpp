@@ -864,8 +864,7 @@ void EndcordPlugin::enqueueBotSystemMessage(std::string event_name, std::string 
         }
         else {
             pending_system_messages_.push_back(
-                {std::move(event_name), std::move(player_name),
-                 bridge_support::truncateUtf8Bytes(content, bridge_support::kDiscordMaxMessageLength)});
+                {std::move(event_name), std::move(player_name), bridge_support::truncateUtf8Bytes(content, kDiscordMaxMessageLength)});
         }
     }
     if (dropped) {
