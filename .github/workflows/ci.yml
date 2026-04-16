@@ -19,25 +19,31 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build Debian 12 compatible plugin
-        run: ./scripts/build-plugin-debian12.sh
-
-      - name: Run tests in Debian 12 container
+      - name: Install Linux build dependencies
         run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            endcord-build:debian12 \
-            bash -lc 'ctest --test-dir build-debian12 --output-on-failure'
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build libssl-dev
+
+      - name: Bootstrap local libc++ toolchain
+        run: ./scripts/setup-local-libcxx.sh
+
+      - name: Configure
+        run: cmake --preset linux-clang-local-libcxx
+
+      - name: Build
+        run: cmake --build --preset build-local -j4
+
+      - name: Run tests
+        run: ctest --test-dir build-local --output-on-failure
 
       - name: Verify artifact
-        run: test -f build-debian12/endstone_endcord.so
+        run: test -f build-local/endstone_endcord.so
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: endstone-endcord-linux
           path: |
-            build-debian12/endstone_endcord.so
+            build-local/endstone_endcord.so
             config/config.json.example
             config/config.schema.json
