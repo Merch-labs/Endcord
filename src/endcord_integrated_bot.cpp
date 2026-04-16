@@ -910,12 +910,6 @@ struct IntegratedBot::Impl {
 IntegratedBot::IntegratedBot(LogCallback info_logger, LogCallback warning_logger)
     : info_logger_(std::move(info_logger)), warning_logger_(std::move(warning_logger)), impl_(std::make_unique<Impl>(this))
 {
-    if (!info_logger_) {
-        info_logger_ = [](const std::string &) {};
-    }
-    if (!warning_logger_) {
-        warning_logger_ = [](const std::string &) {};
-    }
 }
 
 IntegratedBot::~IntegratedBot()
@@ -961,9 +955,7 @@ bool IntegratedBot::start(const BotConfig &config, IntegratedBotCallbacks callba
 
     impl_->cluster->on_log([this](const dpp::log_t &event) {
         if (event.severity >= parseLogLevel(impl_->config.logging.level)) {
-            if (warning_logger_) {
-                warning_logger_("Discord runtime: " + event.message);
-            }
+            warning_logger_("Discord runtime: " + event.message);
         }
     });
 
